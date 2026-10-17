@@ -388,24 +388,33 @@ struct MVRunningBanner: View {
             if let target = switchTarget {
                 Image(systemName: "exclamationmark.triangle.fill")
                     .foregroundStyle(Color(hex: 0xB42318))
+                // Two lines at most, and first claim on the width: an unbounded height here
+                // let the text grow one word per line and push the whole window off screen
                 Text("**\(app.name)** tourne déjà sur \(computer.name). Le quitter pour lancer \(target.name) ? Le travail non enregistré sera perdu.")
                     .font(.system(size: 13))
-                    .fixedSize(horizontal: false, vertical: true)
-                Spacer()
+                    .lineLimit(2)
+                    .layoutPriority(1)
+                Spacer(minLength: 8)
                 Button("Annuler") { model.confirmSwitch = nil }
+                    .fixedSize()
                 Button("Quitter et lancer", role: .destructive) { model.quitAndLaunch(target, on: computer) }
                     .tint(Color(hex: 0xB42318))
                     .buttonStyle(.borderedProminent)
+                    .fixedSize()
             } else if confirming {
                 Image(systemName: "exclamationmark.triangle.fill")
                     .foregroundStyle(Color(hex: 0xB42318))
                 Text("Quitter **\(app.name)** sur \(computer.name) ? Le travail non enregistré sera perdu.")
                     .font(.system(size: 13))
-                Spacer()
+                    .lineLimit(2)
+                    .layoutPriority(1)
+                Spacer(minLength: 8)
                 Button("Annuler") { model.confirmQuitComputerId = nil }
+                    .fixedSize()
                 Button("Quitter", role: .destructive) { model.quitRunningApp(on: computer) }
                     .tint(Color(hex: 0xB42318))
                     .buttonStyle(.borderedProminent)
+                    .fixedSize()
             } else {
                 Circle().fill(Color(hex: 0x28B44B)).frame(width: 8, height: 8)
                     .accessibilityHidden(true)
