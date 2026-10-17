@@ -801,6 +801,16 @@
         <translation>Natif</translation>
     </message>
     <message>
+        <location filename="../gui/SettingsView.qml" line="1404"/>
+        <source>Disable AWDL while streaming</source>
+        <translation>Couper l'AWDL pendant le stream</translation>
+    </message>
+    <message>
+        <location filename="../gui/SettingsView.qml" line="1420"/>
+        <source>Turns off AirDrop/AirPlay Wireless Direct Link during streams to avoid Wi-Fi lag spikes. Requires a one-time administrator approval.</source>
+        <translation>Coupe le lien Wi-Fi direct d'AirDrop/AirPlay (AWDL) pendant le stream pour éviter les pics de latence Wi-Fi. Nécessite une autorisation administrateur unique.</translation>
+    </message>
+    <message>
         <location filename="../gui/SettingsView.qml" line="221"/>
         <source>Auto (%1)</source>
         <translation>Auto (%1)</translation>

@@ -1398,6 +1398,28 @@ Flickable {
                     ToolTip.visible: hovered
                     ToolTip.text: qsTr("Prevents the screensaver from starting or the display from going to sleep while streaming.")
                 }
+
+                CheckBox {
+                    id: disableAwdlCheck
+                    width: parent.width
+                    visible: SystemProperties.isDarwin
+                    text: qsTr("Disable AWDL while streaming")
+                    font.pointSize: 12
+                    checked: StreamingPreferences.disableAwdl
+                    onToggled: {
+                        // Toggling AWDL needs a one-time admin approval
+                        if (checked && !SystemProperties.isAwdlControlReady() && !SystemProperties.installAwdlControl()) {
+                            checked = false
+                        }
+
+                        StreamingPreferences.disableAwdl = checked
+                    }
+
+                    ToolTip.delay: 1000
+                    ToolTip.timeout: 5000
+                    ToolTip.visible: hovered
+                    ToolTip.text: qsTr("Turns off AirDrop/AirPlay Wireless Direct Link during streams to avoid Wi-Fi lag spikes. Requires a one-time administrator approval.")
+                }
             }
         }
     }

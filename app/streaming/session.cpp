@@ -1,6 +1,7 @@
 #include "session.h"
 #include "settings/streamingpreferences.h"
 #include "streaming/streamutils.h"
+#include "streaming/awdl.h"
 #include "backend/richpresencemanager.h"
 
 #include <Limelight.h>
@@ -1985,6 +1986,9 @@ void Session::exec()
     if (m_Preferences->keepAwake) {
         SDL_DisableScreenSaver();
     }
+
+    // Keep AWDL down for the rest of the stream if requested (restored when exec() returns)
+    AwdlBlocker awdlBlocker(m_Preferences->disableAwdl);
 
     // Hide Qt's fake mouse cursor on EGLFS systems
     if (QGuiApplication::platformName() == "eglfs") {

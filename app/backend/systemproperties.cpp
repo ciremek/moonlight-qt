@@ -6,6 +6,7 @@
 
 #include "streaming/session.h"
 #include "streaming/streamutils.h"
+#include "streaming/awdl.h"
 
 #ifdef Q_OS_WIN32
 #define WIN32_LEAN_AND_MEAN
@@ -182,6 +183,16 @@ QRect SystemProperties::getNativeResolutionAt(int x, int y, bool safeArea)
 
     SDL_QuitSubSystem(SDL_INIT_VIDEO);
     return result;
+}
+
+bool SystemProperties::isAwdlControlReady()
+{
+    return AwdlBlocker::isControlReady();
+}
+
+bool SystemProperties::installAwdlControl()
+{
+    return AwdlBlocker::installSudoersRule();
 }
 
 void SystemProperties::startAsyncLoad()

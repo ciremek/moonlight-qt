@@ -43,6 +43,10 @@ public:
     // global coordinates, or an empty QRect if no display matches
     Q_INVOKABLE QRect getNativeResolutionAt(int x, int y, bool safeArea);
 
+    // AWDL control (macOS only) for disabling AWDL while streaming
+    Q_INVOKABLE bool isAwdlControlReady();
+    Q_INVOKABLE bool installAwdlControl();
+
     Q_INVOKABLE void startAsyncLoad();
     Q_INVOKABLE void waitForAsyncLoad();
     Q_INVOKABLE void refreshDisplays();
