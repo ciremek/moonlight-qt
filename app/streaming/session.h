@@ -1,5 +1,7 @@
 #pragma once
 
+#include <atomic>
+
 #include <QSemaphore>
 #include <QQuickWindow>
 
@@ -105,6 +107,37 @@ public:
 
     // Global top-left corner of the display to stream on, for UIs without a Qt window
     void setDisplayOrigin(const QPoint& origin);
+
+    // Stream overlays drawn by an external UI (the Moonvibe SwiftUI shell) instead of
+    // the built-in stats overlay. Must be set before start().
+    struct StreamStats
+    {
+        double fps;
+        int width;
+        int height;
+        double bitrateMbps;
+        uint32_t rttMs;
+        double decodeMs;
+        double dropPercent;
+    };
+    void setExternalOverlayUi(bool enabled);
+    bool hasExternalOverlayUi() const { return m_ExternalOverlayUi; }
+    bool isExternalStatsVisible() const { return m_ExternalStatsVisible; }
+    void toggleExternalStats();
+    bool isCaptureActive();
+    bool isStreamFullScreen() const { return m_IsFullScreen; }
+    // Thread-safe: runs a stream key combo action (quit, capture, stats, full screen) on the event loop
+    void requestStreamAction(int action);
+    // Called by the decoder roughly every second while external stats are visible
+    void publishStats(const StreamStats& stats);
+
+    enum StreamAction
+    {
+        SA_QUIT,
+        SA_TOGGLE_CAPTURE,
+        SA_TOGGLE_STATS,
+        SA_TOGGLE_FULLSCREEN,
+    };
     Q_INVOKABLE void start();
     Q_INVOKABLE void interrupt();
     Q_PROPERTY(QStringList launchWarnings MEMBER m_LaunchWarnings NOTIFY launchWarningsChanged);
@@ -145,6 +178,12 @@ signals:
     void readyForDeletion();
 
     void launchWarningsChanged();
+
+    // External overlay UI hooks. Emitted on the streaming thread while Qt's event loop
+    // is suspended, so they must be connected with Qt::DirectConnection.
+    void streamWindowReady(void* nativeWindow);
+    void streamWindowClosing();
+    void statsUpdated(Session::StreamStats stats);
 
 private:
     void exec();
@@ -265,6 +304,8 @@ private:
     QQuickWindow* m_QtWindow;
     QPoint m_DisplayOrigin;
     bool m_HasDisplayOrigin;
+    bool m_ExternalOverlayUi;
+    std::atomic<bool> m_ExternalStatsVisible;
     bool m_UnexpectedTermination;
     SdlInputHandler* m_InputHandler;
     int m_MouseEmulationRefCount;

@@ -150,6 +150,9 @@ public:
 
     void updateKeyboardGrabState();
 
+    // Runs a Session::StreamAction as if its key combo had been pressed
+    void performStreamAction(int action);
+
     void updatePointerRegionLock();
 
     static

@@ -2132,6 +2132,28 @@ int FFmpegVideoDecoder::submitDecodeUnit(PDECODE_UNIT du)
             Session::get()->getOverlayManager().setOverlayTextUpdated(Overlay::OverlayDebug);
         }
 
+        // Feed the external UI's stats card if it's showing
+        if (Session::get()->isExternalStatsVisible()) {
+            VIDEO_STATS lastTwoWndStats = {};
+            addVideoStats(m_LastWndVideoStats, lastTwoWndStats);
+            addVideoStats(m_ActiveWndVideoStats, lastTwoWndStats);
+
+            uint32_t rtt = 0, rttVariance = 0;
+            LiGetEstimatedRttInfo(&rtt, &rttVariance);
+
+            Session::StreamStats stats = {};
+            stats.fps = lastTwoWndStats.renderedFps;
+            stats.width = m_VideoDecoderCtx != nullptr ? m_VideoDecoderCtx->width : 0;
+            stats.height = m_VideoDecoderCtx != nullptr ? m_VideoDecoderCtx->height : 0;
+            stats.bitrateMbps = m_BwTracker.GetAverageMbps();
+            stats.rttMs = rtt;
+            stats.decodeMs = lastTwoWndStats.decodedFrames != 0 ?
+                        (lastTwoWndStats.totalDecodeTimeUs / 1000.0) / lastTwoWndStats.decodedFrames : 0;
+            stats.dropPercent = lastTwoWndStats.totalFrames != 0 ?
+                        100.0 * lastTwoWndStats.networkDroppedFrames / lastTwoWndStats.totalFrames : 0;
+            Session::get()->publishStats(stats);
+        }
+
         // Accumulate these values into the global stats
         addVideoStats(m_ActiveWndVideoStats, m_GlobalVideoStats);
 

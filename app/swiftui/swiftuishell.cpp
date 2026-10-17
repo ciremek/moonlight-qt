@@ -162,10 +162,32 @@ void SwiftUIShell::applyPrefs(const QJsonObject& prefs)
     pushPrefs();
 }
 
+int SwiftUIShell::streamState()
+{
+    Session* session = s_Instance->m_Session;
+    if (session == nullptr) {
+        return 0;
+    }
+
+    return (session->isCaptureActive() ? MV_STREAM_CAPTURED : 0) |
+           (session->isExternalStatsVisible() ? MV_STREAM_STATS : 0) |
+           (session->isStreamFullScreen() ? MV_STREAM_FULLSCREEN : 0);
+}
+
 void SwiftUIShell::handleAction(const char* json)
 {
-    // Leave the SwiftUI event handler before doing any heavy lifting
     QJsonObject action = QJsonDocument::fromJson(QByteArray(json)).object();
+
+    // Stream overlay actions arrive while Qt's event loop is suspended by the stream,
+    // so they can't be queued: hand them straight to the session's event loop
+    if (action["action"].toString() == "streamAction") {
+        if (s_Instance->m_Session != nullptr) {
+            s_Instance->m_Session->requestStreamAction(action["value"].toInt());
+        }
+        return;
+    }
+
+    // Leave the SwiftUI event handler before doing any heavy lifting
     QMetaObject::invokeMethod(s_Instance, [action] {
         s_Instance->dispatch(action);
     }, Qt::QueuedConnection);
@@ -327,6 +349,32 @@ void SwiftUIShell::launch(const QString& computerUuid, int appId, const QPoint& 
     m_LaunchError.clear();
     m_Session = new Session(computer, app);
     m_Session->setDisplayOrigin(displayOrigin);
+    m_Session->setExternalOverlayUi(true);
+
+    // Stream overlays: these signals fire on the streaming and decoder threads
+    // while Qt's event loop is suspended, hence the direct connections
+    QByteArray overlayInfo = toJson(QJsonObject {
+        { "computer", computer->name },
+        { "app", app.name },
+        { "targetMbps", m_Prefs->bitrateKbps / 1000.0 },
+    });
+    connect(m_Session, &Session::streamWindowReady, this, [overlayInfo](void* nativeWindow) {
+        mv_overlay_begin(nativeWindow, overlayInfo.constData(), &SwiftUIShell::streamState);
+    }, Qt::DirectConnection);
+    connect(m_Session, &Session::statsUpdated, this, [](Session::StreamStats stats) {
+        mv_overlay_stats(toJson(QJsonObject {
+            { "fps", stats.fps },
+            { "width", stats.width },
+            { "height", stats.height },
+            { "bitrateMbps", stats.bitrateMbps },
+            { "rttMs", static_cast<int>(stats.rttMs) },
+            { "decodeMs", stats.decodeMs },
+            { "dropPercent", stats.dropPercent },
+        }).constData());
+    }, Qt::DirectConnection);
+    connect(m_Session, &Session::streamWindowClosing, this, [] {
+        mv_overlay_end();
+    }, Qt::DirectConnection);
 
     connect(m_Session, &Session::stageStarting, this, [this](QString stage) {
         setStatus(QStringLiteral("Démarrage : %1…").arg(stage), true);

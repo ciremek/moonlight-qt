@@ -33,6 +33,7 @@ private slots:
 
 private:
     static void handleAction(const char* json);
+    static int streamState();
 
     void dispatch(const QJsonObject& action);
     void launch(const QString& computerUuid, int appId, const QPoint& displayOrigin);

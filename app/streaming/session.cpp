@@ -29,6 +29,7 @@
 #define SDL_CODE_GAMECONTROLLER_SET_MOTION_EVENT_STATE 103
 #define SDL_CODE_GAMECONTROLLER_SET_CONTROLLER_LED 104
 #define SDL_CODE_GAMECONTROLLER_SET_ADAPTIVE_TRIGGERS 105
+#define SDL_CODE_STREAM_ACTION 106
 
 #include <openssl/rand.h>
 
@@ -41,6 +42,10 @@
 #include <QGuiApplication>
 #include <QCursor>
 #include <QScreen>
+
+#ifdef Q_OS_DARWIN
+#include <SDL_syswm.h>
+#endif
 
 #if QT_VERSION >= QT_VERSION_CHECK(6, 0, 0)
 #include <QQuickOpenGLUtils>
@@ -576,6 +581,8 @@ Session::Session(NvComputer* computer, NvApp& app, StreamingPreferences *prefere
       m_AudioMuted(false),
       m_QtWindow(nullptr),
       m_HasDisplayOrigin(false),
+      m_ExternalOverlayUi(false),
+      m_ExternalStatsVisible(false),
       m_UnexpectedTermination(true), // Failure prior to streaming is unexpected
       m_InputHandler(nullptr),
       m_MouseEmulationRefCount(0),
@@ -602,6 +609,35 @@ void Session::setDisplayOrigin(const QPoint& origin)
 {
     m_DisplayOrigin = origin;
     m_HasDisplayOrigin = true;
+}
+
+void Session::setExternalOverlayUi(bool enabled)
+{
+    m_ExternalOverlayUi = enabled;
+}
+
+void Session::toggleExternalStats()
+{
+    m_ExternalStatsVisible = !m_ExternalStatsVisible;
+}
+
+bool Session::isCaptureActive()
+{
+    return m_InputHandler != nullptr && m_InputHandler->isCaptureActive();
+}
+
+void Session::requestStreamAction(int action)
+{
+    SDL_Event event = {};
+    event.type = SDL_USEREVENT;
+    event.user.code = SDL_CODE_STREAM_ACTION;
+    event.user.data1 = (void*)(uintptr_t)action;
+    SDL_PushEvent(&event);
+}
+
+void Session::publishStats(const StreamStats& stats)
+{
+    emit statsUpdated(stats);
 }
 
 void Session::applyAutoResolution()
@@ -2041,7 +2077,24 @@ void Session::exec()
     RichPresenceManager presence(*m_Preferences, m_App.name);
 
     // Toggle the stats overlay if requested by the user
-    m_OverlayManager.setOverlayState(Overlay::OverlayDebug, m_Preferences->showPerformanceOverlay);
+    if (m_ExternalOverlayUi) {
+        // The external UI shows its own stats card instead of the built-in overlay
+        m_ExternalStatsVisible = m_Preferences->showPerformanceOverlay;
+        m_OverlayManager.setOverlayState(Overlay::OverlayDebug, false);
+
+        void* nativeWindow = nullptr;
+#ifdef Q_OS_DARWIN
+        SDL_SysWMinfo info;
+        SDL_VERSION(&info.version);
+        if (SDL_GetWindowWMInfo(m_Window, &info) && info.subsystem == SDL_SYSWM_COCOA) {
+            nativeWindow = (void*)info.info.cocoa.window;
+        }
+#endif
+        emit streamWindowReady(nativeWindow);
+    }
+    else {
+        m_OverlayManager.setOverlayState(Overlay::OverlayDebug, m_Preferences->showPerformanceOverlay);
+    }
 
     // Switch to async logging mode when we enter the SDL loop
     StreamUtils::enterAsyncLoggingMode();
@@ -2121,6 +2174,9 @@ void Session::exec()
             case SDL_CODE_GAMECONTROLLER_SET_ADAPTIVE_TRIGGERS:
                 m_InputHandler->setAdaptiveTriggers((uint16_t)(uintptr_t)event.user.data1,
                                                     (DualSenseOutputReport *)event.user.data2);
+                break;
+            case SDL_CODE_STREAM_ACTION:
+                m_InputHandler->performStreamAction((int)(uintptr_t)event.user.data1);
                 break;
             default:
                 SDL_assert(false);
@@ -2446,6 +2502,10 @@ DispatchDeferredCleanup:
             m_QtWindow->setWindowState(Qt::WindowNoState);
         }
 #endif
+    }
+
+    if (m_ExternalOverlayUi) {
+        emit streamWindowClosing();
     }
 
     // This must be called after the decoder is deleted, because

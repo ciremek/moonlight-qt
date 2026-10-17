@@ -22,6 +22,24 @@
 #define GET_KEYPRESS_EXTENDED_MODIFIER(x) ((char)(((x) >> 16) & 0xFF))
 #define GET_KEYPRESS_FLAGS(x) ((char)(((x) >> 24) & 0xFF))
 
+void SdlInputHandler::performStreamAction(int action)
+{
+    switch (action) {
+    case Session::SA_QUIT:
+        performSpecialKeyCombo(KeyComboQuit);
+        break;
+    case Session::SA_TOGGLE_CAPTURE:
+        performSpecialKeyCombo(KeyComboUngrabInput);
+        break;
+    case Session::SA_TOGGLE_STATS:
+        performSpecialKeyCombo(KeyComboToggleStatsOverlay);
+        break;
+    case Session::SA_TOGGLE_FULLSCREEN:
+        performSpecialKeyCombo(KeyComboToggleFullScreen);
+        break;
+    }
+}
+
 void SdlInputHandler::performSpecialKeyCombo(KeyCombo combo)
 {
     switch (combo) {
@@ -62,9 +80,14 @@ void SdlInputHandler::performSpecialKeyCombo(KeyCombo combo)
         SDL_LogInfo(SDL_LOG_CATEGORY_APPLICATION,
                     "Detected stats toggle combo");
 
-        // Toggle the stats overlay
-        Session::get()->getOverlayManager().setOverlayState(Overlay::OverlayDebug,
-                                                            !Session::get()->getOverlayManager().isOverlayEnabled(Overlay::OverlayDebug));
+        // Toggle the stats overlay (or the external UI's stats card)
+        if (Session::get()->hasExternalOverlayUi()) {
+            Session::get()->toggleExternalStats();
+        }
+        else {
+            Session::get()->getOverlayManager().setOverlayState(Overlay::OverlayDebug,
+                                                                !Session::get()->getOverlayManager().isOverlayEnabled(Overlay::OverlayDebug));
+        }
         break;
 
     case KeyComboToggleMouseMode:

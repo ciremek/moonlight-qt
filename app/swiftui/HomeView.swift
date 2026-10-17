@@ -216,6 +216,7 @@ struct MVKeycap: View {
             .padding(.horizontal, 5)
             .padding(.vertical, 1)
             .background(RoundedRectangle(cornerRadius: 5).strokeBorder(.tertiary, lineWidth: 0.5))
+            .fixedSize()
             .accessibilityHidden(true)
     }
 }
