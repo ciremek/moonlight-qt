@@ -15,6 +15,7 @@
 #include <unistd.h>
 
 #include <QProcess>
+#include <QRegularExpression>
 #include <QStringList>
 
 extern char** environ;
@@ -157,34 +158,83 @@ bool AwdlBlocker::isControlReady()
 #endif
 }
 
-bool AwdlBlocker::installSudoersRule()
-{
 #ifdef Q_OS_DARWIN
+// Arguments for osascript that install the sudoers rule through the standard macOS
+// admin prompt, or an empty list if the rule can't be built safely for this user.
+static QStringList sudoersInstallArguments()
+{
     struct passwd* pw = getpwuid(getuid());
     if (pw == nullptr) {
-        return false;
+        return {};
     }
 
+    // The name goes into a sudoers rule and a quoted shell string: macOS short names
+    // only use these characters, so anything else is refused rather than escaped
     QString user = QString::fromLocal8Bit(pw->pw_name);
+    static const QRegularExpression safeName("^[A-Za-z0-9._-]+$");
+    if (!safeName.match(user).hasMatch()) {
+        SDL_LogWarn(SDL_LOG_CATEGORY_APPLICATION, "Refusing to build an AWDL sudoers rule for this user name");
+        return {};
+    }
 
-    QString rule = QString("%1 ALL=(root) NOPASSWD: %2 %3 up, %2 %3 down")
-            .arg(user, IFCONFIG_PATH, AWDL_INTERFACE);
-    QString tmpPath = QString("/tmp/moonvibe.sudoers.%1").arg(getpid());
-    QString script = QStringList {
-        QString("printf '%s\\n' '%1' > %2").arg(rule, tmpPath),
-        QString("/usr/sbin/visudo -cf %1").arg(tmpPath),
-        QString("/usr/bin/install -m 0440 -o root -g wheel %1 %2").arg(tmpPath, SUDOERS_PATH),
-        QString("rm -f %1").arg(tmpPath),
-    }.join(" && ");
+    QString rule = user + " ALL=(root) NOPASSWD: " IFCONFIG_PATH " " AWDL_INTERFACE " up, "
+                   IFCONFIG_PATH " " AWDL_INTERFACE " down";
+
+    // Runs as root. mktemp creates the file exclusively, owned by root and private
+    // (umask 077), so no other process can swap its content between the visudo
+    // check and the install, as it could with a predictable path in /tmp.
+    QString script = "umask 077; "
+                     "t=$(/usr/bin/mktemp /private/tmp/moonvibe.sudoers.XXXXXX) || exit 1; "
+                     "printf '%s\\n' '" + rule + "' > \"$t\" && "
+                     "/usr/sbin/visudo -cf \"$t\" && "
+                     "/usr/bin/install -m 0440 -o root -g wheel \"$t\" " SUDOERS_PATH "; "
+                     "rc=$?; /bin/rm -f \"$t\"; exit $rc";
 
     QString escaped = script;
     escaped.replace("\\", "\\\\").replace("\"", "\\\"");
+    return { "-e", "do shell script \"" + escaped + "\" with administrator privileges" };
+}
+#endif
 
-    QProcess::execute("/usr/bin/osascript",
-                      { "-e", QString("do shell script \"%1\" with administrator privileges").arg(escaped) });
+bool AwdlBlocker::installSudoersRule()
+{
+#ifdef Q_OS_DARWIN
+    QStringList arguments = sudoersInstallArguments();
+    if (arguments.isEmpty()) {
+        return false;
+    }
 
+    QProcess::execute("/usr/bin/osascript", arguments);
     return isControlReady();
 #else
     return false;
+#endif
+}
+
+void AwdlBlocker::installSudoersRuleAsync(QObject* context, std::function<void(bool)> done)
+{
+#ifdef Q_OS_DARWIN
+    QStringList arguments = sudoersInstallArguments();
+    if (arguments.isEmpty()) {
+        done(false);
+        return;
+    }
+
+    // The admin prompt can stay up for a while: don't block the UI meanwhile
+    auto process = new QProcess(context);
+    QObject::connect(process, &QProcess::finished, context, [process, done] {
+        process->deleteLater();
+        done(isControlReady());
+    });
+    QObject::connect(process, &QProcess::errorOccurred, context, [process, done](QProcess::ProcessError error) {
+        if (error == QProcess::FailedToStart) {
+            process->deleteLater();
+            done(false);
+        }
+    });
+    process->start("/usr/bin/osascript", arguments);
+#else
+    Q_UNUSED(context);
+    done(false);
 #endif
 }

@@ -1,9 +1,12 @@
 #pragma once
 
 #include <atomic>
+#include <functional>
 #include <condition_variable>
 #include <mutex>
 #include <thread>
+
+class QObject;
 
 // Keeps the macOS AWDL interface (awdl0) down while alive, which avoids the
 // periodic Wi-Fi latency spikes AWDL causes during streaming. macOS brings
@@ -23,6 +26,9 @@ public:
     // Installs the sudoers rule through the standard macOS admin prompt.
     // Returns true if AWDL control is ready afterwards.
     static bool installSudoersRule();
+
+    // Same without blocking: done(ready) runs on context's thread once the prompt is answered
+    static void installSudoersRuleAsync(QObject* context, std::function<void(bool)> done);
 
 private:
     static bool isInterfaceUp();

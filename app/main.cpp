@@ -468,8 +468,11 @@ int main(int argc, char *argv[])
     if (IS_UNSPECIFIED_HANDLE(oldConErr))
 #endif
     {
-        s_LoggerFile = new QFile(tempDir.filePath(QString("Moonlight-%1.log").arg(QDateTime::currentSecsSinceEpoch())));
-        if (s_LoggerFile->open(QIODevice::WriteOnly | QIODevice::Text)) {
+        // NewOnly refuses to reuse (or follow a link at) an existing path, and the log is
+        // private to the user since it names the host PC, its addresses and the apps launched
+        s_LoggerFile = new QFile(tempDir.filePath(QString("Moonvibe-%1.log").arg(QDateTime::currentSecsSinceEpoch())));
+        if (s_LoggerFile->open(QIODevice::WriteOnly | QIODevice::NewOnly | QIODevice::Text)) {
+            s_LoggerFile->setPermissions(QFileDevice::ReadOwner | QFileDevice::WriteOwner);
             QTextStream(stderr) << "Redirecting log output to " << s_LoggerFile->fileName() << Qt::endl;
             s_LoggerStream.setDevice(s_LoggerFile);
         }
@@ -501,7 +504,7 @@ int main(int argc, char *argv[])
 
 #ifdef LOG_TO_FILE
     // Prune the oldest existing logs if there are more than 10
-    QStringList existingLogNames = tempDir.entryList(QStringList("Moonlight-*.log"), QDir::NoFilter, QDir::SortFlag::Time);
+    QStringList existingLogNames = tempDir.entryList(QStringList("Moonvibe-*.log"), QDir::NoFilter, QDir::SortFlag::Time);
     for (int i = 10; i < existingLogNames.size(); i++) {
         qInfo() << "Removing old log file:" << existingLogNames.at(i);
         QFile(tempDir.filePath(existingLogNames.at(i))).remove();
