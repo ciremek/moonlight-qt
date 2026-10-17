@@ -596,11 +596,57 @@ Session::~Session()
     SDL_DestroyMutex(m_DecoderLock);
 }
 
+void Session::applyAutoResolution()
+{
+    if (m_Preferences->resolutionMode == StreamingPreferences::RM_FIXED) {
+        return;
+    }
+
+    // Match the display hosting the Qt UI, since the stream window opens there
+    int displayIndex = 0;
+    QScreen* screen = m_QtWindow != nullptr ? m_QtWindow->screen() : nullptr;
+    if (screen != nullptr) {
+        QPoint origin = screen->geometry().topLeft();
+        int matchedIndex = StreamUtils::getDisplayIndexAtOrigin(origin.x(), origin.y());
+        if (matchedIndex >= 0) {
+            displayIndex = matchedIndex;
+        }
+    }
+
+    SDL_DisplayMode desktopMode;
+    SDL_Rect safeArea;
+    if (!StreamUtils::getNativeDesktopMode(displayIndex, &desktopMode, &safeArea)) {
+        SDL_LogWarn(SDL_LOG_CATEGORY_APPLICATION,
+                    "Unable to detect native resolution of display %d; keeping %dx%d",
+                    displayIndex, m_Preferences->width, m_Preferences->height);
+        return;
+    }
+
+    bool useSafeArea = m_Preferences->resolutionMode == StreamingPreferences::RM_AUTO_SAFE_AREA;
+    m_Preferences->width = useSafeArea ? safeArea.w : desktopMode.w;
+    m_Preferences->height = useSafeArea ? safeArea.h : desktopMode.h;
+
+    if (m_Preferences->autoAdjustBitrate) {
+        m_Preferences->bitrateKbps = StreamingPreferences::getDefaultBitrate(m_Preferences->width,
+                                                                             m_Preferences->height,
+                                                                             m_Preferences->fps,
+                                                                             m_Preferences->enableYUV444);
+    }
+
+    SDL_LogInfo(SDL_LOG_CATEGORY_APPLICATION,
+                "Auto resolution: using %dx%d from display %d (%d Kbps)",
+                m_Preferences->width, m_Preferences->height, displayIndex, m_Preferences->bitrateKbps);
+}
+
 bool Session::initialize(QQuickWindow* qtWindow)
 {
     m_QtWindow = qtWindow;
 
 #ifdef Q_OS_DARWIN
+    // On Darwin, display detection uses CoreGraphics, so this can (and must)
+    // run before the notch handling below which depends on the stream resolution
+    applyAutoResolution();
+
     if (qEnvironmentVariableIntValue("I_WANT_BUGGY_FULLSCREEN") == 0) {
         // If we have a notch and the user specified one of the two native display modes
         // (notched or notchless), override the fullscreen mode to ensure it works as expected.
@@ -654,6 +700,11 @@ bool Session::initialize(QQuickWindow* qtWindow)
     // causes an IME popup when certain keys are held down
     // on macOS.
     SDL_StopTextInput();
+
+#ifndef Q_OS_DARWIN
+    // Other platforms detect displays through SDL, so wait for video init
+    applyAutoResolution();
+#endif
 
     LiInitializeStreamConfiguration(&m_StreamConfig);
     m_StreamConfig.width = m_Preferences->width;

@@ -23,6 +23,11 @@ public:
     static
     bool getNativeDesktopMode(int displayIndex, SDL_DisplayMode* mode, SDL_Rect* safeArea);
 
+    // Returns the display index (as used by getNativeDesktopMode()) whose
+    // top-left corner is at the given global coordinates, or -1 if none matches
+    static
+    int getDisplayIndexAtOrigin(int x, int y);
+
     static
     int getDisplayRefreshRate(SDL_Window* window);
 

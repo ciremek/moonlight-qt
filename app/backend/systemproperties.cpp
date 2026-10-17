@@ -163,6 +163,27 @@ int SystemProperties::getRefreshRate(int displayIndex)
     return monitorRefreshRates.value(displayIndex);
 }
 
+QRect SystemProperties::getNativeResolutionAt(int x, int y, bool safeArea)
+{
+    if (SDL_InitSubSystem(SDL_INIT_VIDEO) != 0) {
+        SDL_LogError(SDL_LOG_CATEGORY_APPLICATION,
+                     "SDL_InitSubSystem(SDL_INIT_VIDEO) failed: %s",
+                     SDL_GetError());
+        return QRect();
+    }
+
+    QRect result;
+    int displayIndex = StreamUtils::getDisplayIndexAtOrigin(x, y);
+    SDL_DisplayMode desktopMode;
+    SDL_Rect safeAreaRect;
+    if (displayIndex >= 0 && StreamUtils::getNativeDesktopMode(displayIndex, &desktopMode, &safeAreaRect)) {
+        result = safeArea ? QRect(0, 0, safeAreaRect.w, safeAreaRect.h) : QRect(0, 0, desktopMode.w, desktopMode.h);
+    }
+
+    SDL_QuitSubSystem(SDL_INIT_VIDEO);
+    return result;
+}
+
 void SystemProperties::startAsyncLoad()
 {
     if (systemPropertyQueryThread) {

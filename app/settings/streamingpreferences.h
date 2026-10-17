@@ -119,9 +119,18 @@ public:
     };
     Q_ENUM(CaptureSysKeysMode);
 
+    enum ResolutionMode
+    {
+        RM_FIXED,
+        RM_AUTO_NATIVE,
+        RM_AUTO_SAFE_AREA,
+    };
+    Q_ENUM(ResolutionMode);
+
     Q_PROPERTY(int width MEMBER width NOTIFY displayModeChanged)
     Q_PROPERTY(int height MEMBER height NOTIFY displayModeChanged)
     Q_PROPERTY(int fps MEMBER fps NOTIFY displayModeChanged)
+    Q_PROPERTY(ResolutionMode resolutionMode MEMBER resolutionMode NOTIFY displayModeChanged)
     Q_PROPERTY(int bitrateKbps MEMBER bitrateKbps NOTIFY bitrateChanged)
     Q_PROPERTY(bool unlockBitrate MEMBER unlockBitrate NOTIFY unlockBitrateChanged)
     Q_PROPERTY(bool autoAdjustBitrate MEMBER autoAdjustBitrate NOTIFY autoAdjustBitrateChanged)
@@ -164,6 +173,7 @@ public:
     int width;
     int height;
     int fps;
+    ResolutionMode resolutionMode;
     int bitrateKbps;
     bool unlockBitrate;
     bool autoAdjustBitrate;

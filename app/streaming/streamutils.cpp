@@ -369,6 +369,33 @@ bool StreamUtils::getNativeDesktopMode(int displayIndex, SDL_DisplayMode* mode, 
     return true;
 }
 
+int StreamUtils::getDisplayIndexAtOrigin(int x, int y)
+{
+#ifdef Q_OS_DARWIN
+    // Use the same CoreGraphics display ordering as getNativeDesktopMode()
+    CGDirectDisplayID displayIds[16];
+    uint32_t displayCount = 0;
+    CGGetActiveDisplayList(16, displayIds, &displayCount);
+    for (uint32_t i = 0; i < displayCount; i++) {
+        CGRect bounds = CGDisplayBounds(displayIds[i]);
+        if (static_cast<int>(bounds.origin.x) == x && static_cast<int>(bounds.origin.y) == y) {
+            return static_cast<int>(i);
+        }
+    }
+#else
+    SDL_assert(SDL_WasInit(SDL_INIT_VIDEO));
+
+    for (int i = 0; i < SDL_GetNumVideoDisplays(); i++) {
+        SDL_Rect bounds;
+        if (SDL_GetDisplayBounds(i, &bounds) == 0 && bounds.x == x && bounds.y == y) {
+            return i;
+        }
+    }
+#endif
+
+    return -1;
+}
+
 int StreamUtils::getDrmFdForWindow(SDL_Window* window, bool* mustClose)
 {
     *mustClose = false;

@@ -157,7 +157,8 @@ Flickable {
                                                                "text": friendlyNamePrefix+" ("+rect.width+"x"+rect.height+")",
                                                                "video_width": ""+rect.width,
                                                                "video_height": ""+rect.height,
-                                                               "is_custom": false
+                                                               "is_custom": false,
+                                                               "resolution_mode": StreamingPreferences.RM_FIXED
                                                            })
                             }
                         }
@@ -197,16 +198,64 @@ Flickable {
                                 }
                             }
 
+                            // Add the auto entries, which follow whichever display the stream opens on.
+                            // refreshAutoEntries() fills in the resolution of the display we're on.
+                            var hasNotch = false
+                            for (var notchIndex = 0; ; notchIndex++) {
+                                var notchScreenRect = SystemProperties.getNativeResolution(notchIndex)
+                                if (notchScreenRect.width === 0) {
+                                    break
+                                }
+
+                                var notchSafeArea = SystemProperties.getSafeAreaResolution(notchIndex)
+                                if (notchSafeArea.width !== notchScreenRect.width || notchSafeArea.height !== notchScreenRect.height) {
+                                    hasNotch = true
+                                }
+                            }
+
+                            var primaryRect = SystemProperties.getNativeResolution(0)
+                            if (primaryRect.width > 0) {
+                                resolutionListModel.insert(0,
+                                                           {
+                                                               "text": "Auto",
+                                                               "video_width": ""+primaryRect.width,
+                                                               "video_height": ""+primaryRect.height,
+                                                               "is_custom": false,
+                                                               "resolution_mode": StreamingPreferences.RM_AUTO_NATIVE
+                                                           })
+                                if (hasNotch) {
+                                    var primarySafeArea = SystemProperties.getSafeAreaResolution(0)
+                                    resolutionListModel.insert(1,
+                                                               {
+                                                                   "text": "Auto",
+                                                                   "video_width": ""+primarySafeArea.width,
+                                                                   "video_height": ""+primarySafeArea.height,
+                                                                   "is_custom": false,
+                                                                   "resolution_mode": StreamingPreferences.RM_AUTO_SAFE_AREA
+                                                               })
+                                }
+                            }
+
                             // load the saved width/height, and iterate through the ComboBox until a match is found
                             // and set it to that index.
                             var saved_width = StreamingPreferences.width
                             var saved_height = StreamingPreferences.height
+                            var saved_mode = StreamingPreferences.resolutionMode
                             var index_set = false
                             for (var i = 0; i < resolutionListModel.count; i++) {
                                 var el_width = parseInt(resolutionListModel.get(i).video_width);
                                 var el_height = parseInt(resolutionListModel.get(i).video_height);
+                                var el_mode = resolutionListModel.get(i).resolution_mode
 
-                                if (saved_width === el_width && saved_height === el_height) {
+                                if (saved_mode !== StreamingPreferences.RM_FIXED) {
+                                    if (saved_mode === el_mode) {
+                                        currentIndex = i
+                                        index_set = true
+                                        break
+                                    }
+                                }
+                                else if (el_mode === StreamingPreferences.RM_FIXED &&
+                                         saved_width === el_width && saved_height === el_height) {
                                     currentIndex = i
                                     index_set = true
                                     break
@@ -219,7 +268,8 @@ Flickable {
                                                                "text": qsTr("Custom")+" ("+StreamingPreferences.width+"x"+StreamingPreferences.height+")",
                                                                "video_width": ""+StreamingPreferences.width,
                                                                "video_height": ""+StreamingPreferences.height,
-                                                               "is_custom": true
+                                                               "is_custom": true,
+                                                               "resolution_mode": StreamingPreferences.RM_FIXED
                                                            })
                                 currentIndex = resolutionListModel.count - 1
                             }
@@ -228,15 +278,52 @@ Flickable {
                                                                "text": qsTr("Custom"),
                                                                "video_width": "",
                                                                "video_height": "",
-                                                               "is_custom": true
+                                                               "is_custom": true,
+                                                               "resolution_mode": StreamingPreferences.RM_FIXED
                                                            })
                             }
 
-                            // Since we don't call activate() here, we need to trigger
-                            // width calculation manually
-                            recalculateWidth()
-
                             lastIndexValue = currentIndex
+
+                            // Also triggers the width calculation, since we don't call activate() here
+                            refreshAutoEntries()
+                        }
+
+                        // Show the resolution the auto entries will use on the display hosting this window
+                        function refreshAutoEntries() {
+                            for (var i = 0; i < resolutionListModel.count; i++) {
+                                var mode = resolutionListModel.get(i).resolution_mode
+                                if (mode === StreamingPreferences.RM_FIXED) {
+                                    continue
+                                }
+
+                                var safeArea = mode === StreamingPreferences.RM_AUTO_SAFE_AREA
+                                var rect = SystemProperties.getNativeResolutionAt(Screen.virtualX, Screen.virtualY, safeArea)
+                                if (rect.width === 0) {
+                                    continue
+                                }
+
+                                var resolutionText = rect.width+"x"+rect.height
+                                resolutionListModel.setProperty(i, "text", safeArea ? qsTr("Auto, Excluding Notch (%1)").arg(resolutionText)
+                                                                                    : qsTr("Auto (%1)").arg(resolutionText))
+                                resolutionListModel.setProperty(i, "video_width", ""+rect.width)
+                                resolutionListModel.setProperty(i, "video_height", ""+rect.height)
+                            }
+
+                            // Keep the bitrate preview in sync with the display we're now on
+                            if (currentIndex >= 0 && resolutionListModel.get(currentIndex).resolution_mode !== StreamingPreferences.RM_FIXED) {
+                                updateBitrateForSelection()
+                            }
+
+                            recalculateWidth()
+                        }
+
+                        // Screen.virtualX/Y change when the window moves to another display
+                        property point screenOrigin: Qt.point(Screen.virtualX, Screen.virtualY)
+                        onScreenOriginChanged: {
+                            if (resolutionListModel.count > 0) {
+                                refreshAutoEntries()
+                            }
                         }
 
                         id: resolutionComboBox
@@ -251,30 +338,36 @@ Flickable {
                                 video_width: "1280"
                                 video_height: "720"
                                 is_custom: false
+                                resolution_mode: 0
                             }
                             ListElement {
                                 text: qsTr("1080p")
                                 video_width: "1920"
                                 video_height: "1080"
                                 is_custom: false
+                                resolution_mode: 0
                             }
                             ListElement {
                                 text: qsTr("1440p")
                                 video_width: "2560"
                                 video_height: "1440"
                                 is_custom: false
+                                resolution_mode: 0
                             }
                             ListElement {
                                 text: qsTr("4K")
                                 video_width: "3840"
                                 video_height: "2160"
                                 is_custom: false
+                                resolution_mode: 0
                             }
                         }
 
                         function updateBitrateForSelection() {
                             var selectedWidth = parseInt(resolutionListModel.get(currentIndex).video_width)
                             var selectedHeight = parseInt(resolutionListModel.get(currentIndex).video_height)
+
+                            StreamingPreferences.resolutionMode = resolutionListModel.get(currentIndex).resolution_mode
 
                             // Only modify the bitrate if the values actually changed
                             if (StreamingPreferences.width !== selectedWidth || StreamingPreferences.height !== selectedHeight) {

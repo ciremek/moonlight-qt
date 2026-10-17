@@ -801,6 +801,16 @@
         <translation>Natif</translation>
     </message>
     <message>
+        <location filename="../gui/SettingsView.qml" line="221"/>
+        <source>Auto (%1)</source>
+        <translation>Auto (%1)</translation>
+    </message>
+    <message>
+        <location filename="../gui/SettingsView.qml" line="230"/>
+        <source>Auto, Excluding Notch (%1)</source>
+        <translation>Auto, sans encoche (%1)</translation>
+    </message>
+    <message>
         <location filename="../gui/SettingsView.qml" line="183"/>
         <source>Native (Excluding Notch)</source>
         <translation>Natif (sans encoche)</translation>

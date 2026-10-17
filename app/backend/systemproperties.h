@@ -39,6 +39,10 @@ public:
     Q_INVOKABLE QRect getSafeAreaResolution(int displayIndex);
     Q_INVOKABLE int getRefreshRate(int displayIndex);
 
+    // Native (or notch-free) resolution of the display whose top-left corner is at the given
+    // global coordinates, or an empty QRect if no display matches
+    Q_INVOKABLE QRect getNativeResolutionAt(int x, int y, bool safeArea);
+
     Q_INVOKABLE void startAsyncLoad();
     Q_INVOKABLE void waitForAsyncLoad();
     Q_INVOKABLE void refreshDisplays();
