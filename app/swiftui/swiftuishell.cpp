@@ -12,6 +12,8 @@
 #include <QJsonDocument>
 #include <QTimer>
 
+#include <type_traits>
+
 SwiftUIShell* SwiftUIShell::s_Instance = nullptr;
 
 static QByteArray toJson(const QJsonObject& object)
@@ -125,28 +127,88 @@ void SwiftUIShell::pushPrefs()
         { "height", m_Prefs->height },
         { "fps", m_Prefs->fps },
         { "bitrateKbps", m_Prefs->bitrateKbps },
+        { "unlockBitrate", m_Prefs->unlockBitrate },
         { "windowMode", static_cast<int>(m_Prefs->windowMode) },
         { "vsync", m_Prefs->enableVsync },
         { "framePacing", m_Prefs->framePacing },
         { "hdr", m_Prefs->enableHdr },
+        { "yuv444", m_Prefs->enableYUV444 },
+        { "videoCodec", static_cast<int>(m_Prefs->videoCodecConfig) },
+        { "videoDecoder", static_cast<int>(m_Prefs->videoDecoderSelection) },
+        { "renderer", static_cast<int>(m_Prefs->rendererSelection) },
+        { "audioConfig", static_cast<int>(m_Prefs->audioConfig) },
         { "muteHost", !m_Prefs->playAudioOnHost },
+        { "muteOnFocusLoss", m_Prefs->muteOnFocusLoss },
+        { "absoluteMouse", m_Prefs->absoluteMouseMode },
+        { "swapMouseButtons", m_Prefs->swapMouseButtons },
+        { "reverseScroll", m_Prefs->reverseScrollDirection },
+        { "captureSysKeys", static_cast<int>(m_Prefs->captureSysKeysMode) },
+        { "multiController", m_Prefs->multiController },
+        { "backgroundGamepad", m_Prefs->backgroundGamepad },
+        { "gamepadMouse", m_Prefs->gamepadMouse },
+        { "swapFaceButtons", m_Prefs->swapFaceButtons },
+        { "mdns", m_Prefs->enableMdns },
+        { "detectNetworkBlocking", m_Prefs->detectNetworkBlocking },
         { "disableAwdl", m_Prefs->disableAwdl },
+        { "quitAppAfter", m_Prefs->quitAppAfter },
+        { "gameOptimizations", m_Prefs->gameOptimizations },
+        { "keepAwake", m_Prefs->keepAwake },
+        { "showStats", m_Prefs->showPerformanceOverlay },
+        { "connectionWarnings", m_Prefs->connectionWarnings },
+        { "configurationWarnings", m_Prefs->configurationWarnings },
+        { "richPresence", m_Prefs->richPresence },
     };
     mv_ui_update_prefs(toJson(prefs).constData());
 }
 
 void SwiftUIShell::applyPrefs(const QJsonObject& prefs)
 {
-    m_Prefs->resolutionMode = static_cast<StreamingPreferences::ResolutionMode>(prefs["resolutionMode"].toInt(m_Prefs->resolutionMode));
-    m_Prefs->width = prefs["width"].toInt(m_Prefs->width);
-    m_Prefs->height = prefs["height"].toInt(m_Prefs->height);
-    m_Prefs->fps = prefs["fps"].toInt(m_Prefs->fps);
-    m_Prefs->bitrateKbps = prefs["bitrateKbps"].toInt(m_Prefs->bitrateKbps);
-    m_Prefs->windowMode = static_cast<StreamingPreferences::WindowMode>(prefs["windowMode"].toInt(m_Prefs->windowMode));
-    m_Prefs->enableVsync = prefs["vsync"].toBool(m_Prefs->enableVsync);
-    m_Prefs->framePacing = m_Prefs->enableVsync && prefs["framePacing"].toBool(m_Prefs->framePacing);
-    m_Prefs->enableHdr = prefs["hdr"].toBool(m_Prefs->enableHdr);
+    auto readBool = [&prefs](const char* key, bool& value) { value = prefs[key].toBool(value); };
+    auto readInt = [&prefs](const char* key, int& value) { value = prefs[key].toInt(value); };
+    auto readEnum = [&prefs](const char* key, auto& value) {
+        value = static_cast<std::remove_reference_t<decltype(value)>>(prefs[key].toInt(static_cast<int>(value)));
+    };
+
+    readEnum("resolutionMode", m_Prefs->resolutionMode);
+    readInt("width", m_Prefs->width);
+    readInt("height", m_Prefs->height);
+    readInt("fps", m_Prefs->fps);
+    readInt("bitrateKbps", m_Prefs->bitrateKbps);
+    readBool("unlockBitrate", m_Prefs->unlockBitrate);
+    readEnum("windowMode", m_Prefs->windowMode);
+    readBool("vsync", m_Prefs->enableVsync);
+    readBool("framePacing", m_Prefs->framePacing);
+    m_Prefs->framePacing = m_Prefs->framePacing && m_Prefs->enableVsync;
+    readBool("hdr", m_Prefs->enableHdr);
+    readBool("yuv444", m_Prefs->enableYUV444);
+    readEnum("videoCodec", m_Prefs->videoCodecConfig);
+    readEnum("videoDecoder", m_Prefs->videoDecoderSelection);
+    readEnum("renderer", m_Prefs->rendererSelection);
+    readEnum("audioConfig", m_Prefs->audioConfig);
     m_Prefs->playAudioOnHost = !prefs["muteHost"].toBool(!m_Prefs->playAudioOnHost);
+    readBool("muteOnFocusLoss", m_Prefs->muteOnFocusLoss);
+    readBool("absoluteMouse", m_Prefs->absoluteMouseMode);
+    readBool("swapMouseButtons", m_Prefs->swapMouseButtons);
+    readBool("reverseScroll", m_Prefs->reverseScrollDirection);
+    readEnum("captureSysKeys", m_Prefs->captureSysKeysMode);
+    readBool("multiController", m_Prefs->multiController);
+    readBool("backgroundGamepad", m_Prefs->backgroundGamepad);
+    readBool("gamepadMouse", m_Prefs->gamepadMouse);
+    readBool("swapFaceButtons", m_Prefs->swapFaceButtons);
+    readBool("mdns", m_Prefs->enableMdns);
+    readBool("detectNetworkBlocking", m_Prefs->detectNetworkBlocking);
+    readBool("quitAppAfter", m_Prefs->quitAppAfter);
+    readBool("gameOptimizations", m_Prefs->gameOptimizations);
+    readBool("keepAwake", m_Prefs->keepAwake);
+    readBool("showStats", m_Prefs->showPerformanceOverlay);
+    readBool("connectionWarnings", m_Prefs->connectionWarnings);
+    readBool("configurationWarnings", m_Prefs->configurationWarnings);
+    readBool("richPresence", m_Prefs->richPresence);
+
+    // Without an unlocked bitrate, keep it within the standard range
+    if (!m_Prefs->unlockBitrate && m_Prefs->bitrateKbps > 150000) {
+        m_Prefs->bitrateKbps = 150000;
+    }
 
     // The shell always picks the bitrate explicitly (presets or slider)
     m_Prefs->autoAdjustBitrate = false;

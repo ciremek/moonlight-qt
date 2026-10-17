@@ -49,7 +49,7 @@ struct MVRootView: View {
             Group {
                 Button("Rechercher") { searchFocused = true }
                     .keyboardShortcut("k", modifiers: .command)
-                Button("Réglages") { model.showQuality.toggle() }
+                Button("Réglages") { model.openSettings?(nil) }
                     .keyboardShortcut(",", modifiers: .command)
                 Button("Annuler") { model.cancelLaunch() }
                     .keyboardShortcut(.cancelAction)
@@ -128,7 +128,7 @@ struct MVSidebar: View {
         .safeAreaInset(edge: .bottom) {
             HStack {
                 Button {
-                    model.showQuality = true
+                    model.openSettings?(nil)
                 } label: {
                     Label("Réglages", systemImage: "slider.horizontal.3")
                 }
@@ -482,7 +482,7 @@ struct MVQualityButton: View {
                 Image(systemName: "chevron.down").font(.system(size: 9, weight: .semibold))
             }
         }
-        .help("Qualité du stream (⌘,)")
+        .help("Qualité du stream")
         .popover(isPresented: $model.showQuality, arrowEdge: .bottom) {
             MVQualityPopover(model: model)
         }

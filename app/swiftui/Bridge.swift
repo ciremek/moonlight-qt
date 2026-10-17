@@ -36,6 +36,9 @@ final class MVWindowController: NSObject, NSWindowDelegate {
         window.setFrameAutosaveName("MoonvibeHomeWindow")
         model.window = window
         model.refreshDisplay()
+        model.openSettings = { [unowned model] section in
+            MVSettingsWindowController.show(model: model, section: section)
+        }
     }
 
     func windowWillClose(_ notification: Notification) {

@@ -65,18 +65,52 @@ enum MVWindowMode: Int, Codable, CaseIterable, Identifiable {
     }
 }
 
+/// Mirrors StreamingPreferences, as carried by the bridge (see SwiftUIShell::pushPrefs()).
 struct MVPrefs: Codable, Equatable {
+    // Image
     var resolutionMode: MVResolutionMode = .native
     var width = 1920
     var height = 1080
     var fps = 60
     var bitrateKbps = 20000
+    var unlockBitrate = false
     var windowMode: MVWindowMode = .borderless
     var vsync = true
     var framePacing = false
     var hdr = false
+    // Advanced video
+    var yuv444 = false
+    var videoCodec = 0
+    var videoDecoder = 0
+    var renderer = 0
+    // Audio
+    var audioConfig = 0
     var muteHost = true
+    var muteOnFocusLoss = false
+    // Keyboard and mouse
+    var absoluteMouse = false
+    var swapMouseButtons = false
+    var reverseScroll = false
+    var captureSysKeys = 0
+    // Gamepad
+    var multiController = true
+    var backgroundGamepad = false
+    var gamepadMouse = true
+    var swapFaceButtons = false
+    // Computers and network
+    var mdns = true
+    var detectNetworkBlocking = true
     var disableAwdl = false
+    var quitAppAfter = false
+    var gameOptimizations = true
+    // Misc
+    var keepAwake = true
+    var showStats = false
+    var connectionWarnings = true
+    var configurationWarnings = true
+    var richPresence = true
+
+    var maxBitrateMbps: Int { unlockBitrate ? 500 : 150 }
 }
 
 // MARK: - Presets
@@ -85,7 +119,8 @@ enum MVPreset: String, CaseIterable, Identifiable {
     case fluid, balanced, max, custom
     var id: String { rawValue }
 
-    static let selectable: [MVPreset] = [.fluid, .balanced, .max]
+    /// The built-in presets, recognized from the current values.
+    static let builtIn: [MVPreset] = [.fluid, .balanced, .max]
 
     var label: String {
         switch self {
@@ -101,7 +136,7 @@ enum MVPreset: String, CaseIterable, Identifiable {
         case .fluid: return "Latence minimale, idéal en Wi-Fi."
         case .balanced: return "Le bon compromis pour ton écran."
         case .max: return "Natif, net comme jamais. Câble ou Wi-Fi 6 conseillé."
-        case .custom: return "Tes propres réglages."
+        case .custom: return "Tes réglages à toi, enregistrés dès que tu les modifies."
         }
     }
 
@@ -119,6 +154,23 @@ enum MVPreset: String, CaseIterable, Identifiable {
         case .balanced: return 80_000
         case .max, .custom: return 144_000
         }
+    }
+}
+
+/// The values saved under the Perso preset.
+struct MVCustomPreset: Codable, Equatable {
+    var resolutionMode: MVResolutionMode
+    var width: Int
+    var height: Int
+    var fps: Int
+    var bitrateKbps: Int
+
+    init(_ prefs: MVPrefs) {
+        resolutionMode = prefs.resolutionMode
+        width = prefs.width
+        height = prefs.height
+        fps = prefs.fps
+        bitrateKbps = prefs.bitrateKbps
     }
 }
 
@@ -227,6 +279,8 @@ final class MVModel: ObservableObject {
     @Published var recents: [MVRecent] = []
     @Published var search = ""
     @Published var showQuality = false
+    /// Opens the settings window, on a given section or where it was left.
+    var openSettings: ((MVSettingsSection?) -> Void)?
     @Published var status = ""
     @Published var busy = false
     @Published var errorMessage: String?
@@ -278,11 +332,25 @@ final class MVModel: ObservableObject {
     }
 
     var preset: MVPreset {
-        MVPreset.selectable.first { preset in
+        MVPreset.builtIn.first { preset in
             prefs.resolutionMode == preset.resolutionMode &&
             prefs.bitrateKbps == preset.bitrateKbps &&
             prefs.fps == display.maxFps
         } ?? .custom
+    }
+
+    /// Resolution · frame rate · bitrate a preset streams at, on the current display.
+    func summary(for preset: MVPreset) -> String? {
+        if preset == .custom {
+            guard let custom = customPreset else { return nil }
+            var values = prefs
+            values.width = custom.width
+            values.height = custom.height
+            let (width, height) = display.resolution(for: custom.resolutionMode, prefs: values)
+            return "\(width)×\(height) · \(custom.fps) i/s · \(custom.bitrateKbps / 1000) Mb/s"
+        }
+        let (width, height) = display.resolution(for: preset.resolutionMode, prefs: prefs)
+        return "\(width)×\(height) · \(display.maxFps) i/s · \(preset.bitrateKbps / 1000) Mb/s"
     }
 
     var streamResolution: (Int, Int) { display.resolution(for: prefs.resolutionMode, prefs: prefs) }
@@ -312,6 +380,28 @@ final class MVModel: ObservableObject {
 
     func update(prefs: MVPrefs) {
         self.prefs = prefs
+        // Values set before Perso existed (or in the old UI) become the first Perso
+        if customPreset == nil, preset == .custom {
+            saveCustomPreset()
+        }
+    }
+
+    // MARK: Perso preset
+
+    @Published private(set) var customPreset: MVCustomPreset? = {
+        guard let data = UserDefaults.standard.data(forKey: "MoonvibeCustomPreset") else { return nil }
+        return try? JSONDecoder().decode(MVCustomPreset.self, from: data)
+    }()
+
+    /// Saves the current image values as Perso. Called whenever they match no built-in preset,
+    /// so tweaking resolution, frame rate or bitrate always lands in Perso.
+    private func saveCustomPreset() {
+        let custom = MVCustomPreset(prefs)
+        guard custom != customPreset else { return }
+        customPreset = custom
+        if let data = try? JSONEncoder().encode(custom) {
+            UserDefaults.standard.set(data, forKey: "MoonvibeCustomPreset")
+        }
     }
 
     func refreshDisplay() {
@@ -325,6 +415,9 @@ final class MVModel: ObservableObject {
         change(&updated)
         guard updated != prefs else { return }
         prefs = updated
+        if preset == .custom {
+            saveCustomPreset()
+        }
         if let data = try? JSONEncoder().encode(updated),
            let object = try? JSONSerialization.jsonObject(with: data) {
             sendAction?(["action": "setPrefs", "prefs": object])
@@ -332,7 +425,17 @@ final class MVModel: ObservableObject {
     }
 
     func apply(_ preset: MVPreset) {
-        guard preset != .custom else { return }
+        if preset == .custom {
+            guard let custom = customPreset else { return }
+            setPrefs {
+                $0.resolutionMode = custom.resolutionMode
+                $0.width = custom.width
+                $0.height = custom.height
+                $0.fps = custom.fps
+                $0.bitrateKbps = custom.bitrateKbps
+            }
+            return
+        }
         setPrefs {
             $0.resolutionMode = preset.resolutionMode
             $0.bitrateKbps = preset.bitrateKbps
