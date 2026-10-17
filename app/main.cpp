@@ -55,6 +55,10 @@
 #include "settings/streamingpreferences.h"
 #include "gui/sdlgamepadkeynavigation.h"
 
+#ifdef Q_OS_DARWIN
+#include "swiftui/swiftuishell.h"
+#endif
+
 #if defined(Q_OS_WIN32)
 #define IS_UNSPECIFIED_HANDLE(x) ((x) == INVALID_HANDLE_VALUE || (x) == NULL)
 
@@ -989,6 +993,15 @@ int main(int argc, char *argv[])
 
     switch (commandLineParserResult) {
     case GlobalCommandLineParser::NormalStartRequested:
+#ifdef Q_OS_DARWIN
+        // Moonvibe uses the SwiftUI shell on macOS (MOONVIBE_QML=1 brings back the QML UI)
+        if (qEnvironmentVariableIntValue("MOONVIBE_QML") == 0) {
+            auto shell = new SwiftUIShell(new ComputerManager(StreamingPreferences::get()), &app);
+            shell->show();
+            hasGUI = false;
+            break;
+        }
+#endif
         initialView = "qrc:/gui/PcView.qml";
         break;
     case GlobalCommandLineParser::StreamRequested:
