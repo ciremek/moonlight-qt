@@ -32,6 +32,10 @@ SwiftUIShell::SwiftUIShell(ComputerManager* computerManager, QObject* parent)
             this, &SwiftUIShell::pushComputers, Qt::QueuedConnection);
     connect(&m_BoxArtManager, &BoxArtManager::boxArtLoadComplete,
             this, &SwiftUIShell::handleBoxArtLoaded);
+    connect(m_ComputerManager, &ComputerManager::pairingCompleted,
+            this, &SwiftUIShell::handlePairingCompleted);
+    connect(m_ComputerManager, &ComputerManager::computerAddCompleted,
+            this, &SwiftUIShell::handleComputerAddCompleted);
 }
 
 void SwiftUIShell::show()
@@ -81,6 +85,10 @@ void SwiftUIShell::pushComputers()
         QJsonObject entry;
         {
             QReadLocker lock(&computer->lock);
+            if (m_DeletingUuids.contains(computer->uuid)) {
+                continue;
+            }
+
             appList = computer->appList;
             entry = QJsonObject {
                 { "uuid", computer->uuid },
@@ -201,12 +209,86 @@ void SwiftUIShell::dispatch(const QJsonObject& action)
             m_ComputerManager->quitRunningApp(computer);
         }
     }
+    else if (type == "pair") {
+        pair(action["uuid"].toString());
+    }
+    else if (type == "deleteHost") {
+        deleteHost(action["uuid"].toString());
+    }
+    else if (type == "addHost") {
+        m_ComputerManager->addNewHostManually(action["address"].toString().trimmed());
+    }
     else if (type == "setPrefs") {
         applyPrefs(action["prefs"].toObject());
     }
     else if (type == "quit") {
         QCoreApplication::quit();
     }
+}
+
+void SwiftUIShell::pair(const QString& computerUuid)
+{
+    NvComputer* computer = findComputer(computerUuid);
+    if (computer == nullptr) {
+        return;
+    }
+
+    // The PC shows nothing: the user types this PIN into Sunshine
+    QString pin = m_ComputerManager->generatePinString();
+    mv_ui_update_pairing(toJson(QJsonObject {
+        { "uuid", computerUuid },
+        { "stage", "waiting" },
+        { "pin", pin },
+    }).constData());
+    m_ComputerManager->pairHost(computer, pin);
+}
+
+void SwiftUIShell::deleteHost(const QString& computerUuid)
+{
+    NvComputer* computer = findComputer(computerUuid);
+    if (computer == nullptr) {
+        return;
+    }
+
+    // Deletion finishes on a worker thread: hide the host meanwhile, then let
+    // discovery bring it back as a new, unpaired PC if it is still on the network
+    m_DeletingUuids.insert(computerUuid);
+    for (auto it = m_BoxArtPaths.begin(); it != m_BoxArtPaths.end();) {
+        it = it.key().startsWith(computerUuid + ":") ? m_BoxArtPaths.erase(it) : std::next(it);
+    }
+    m_BoxArtRequested.clear();
+    m_ComputerManager->deleteHost(computer);
+    pushComputers();
+
+    QTimer::singleShot(1500, this, [this, computerUuid] {
+        m_DeletingUuids.remove(computerUuid);
+        pushComputers();
+    });
+}
+
+void SwiftUIShell::handlePairingCompleted(NvComputer* computer, QString error)
+{
+    QString uuid;
+    {
+        QReadLocker lock(&computer->lock);
+        uuid = computer->uuid;
+    }
+
+    mv_ui_update_pairing(toJson(QJsonObject {
+        { "uuid", uuid },
+        { "stage", error.isEmpty() ? "paired" : "failed" },
+        { "error", error },
+    }).constData());
+    pushComputers();
+}
+
+void SwiftUIShell::handleComputerAddCompleted(QVariant success, QVariant detectedPortBlocking)
+{
+    mv_ui_add_host_result(toJson(QJsonObject {
+        { "success", success.toBool() },
+        { "portBlocking", detectedPortBlocking.toBool() },
+    }).constData());
+    pushComputers();
 }
 
 void SwiftUIShell::setStatus(const QString& text, bool busy, bool error)

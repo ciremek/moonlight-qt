@@ -58,6 +58,9 @@ struct MVRootView: View {
             .opacity(0)
             .accessibilityHidden(true)
         }
+        .sheet(isPresented: $model.showPairing) {
+            MVPairingSheet(model: model)
+        }
         .alert("Lancement impossible", isPresented: Binding(
             get: { model.errorMessage != nil },
             set: { if !$0 { model.errorMessage = nil } }
@@ -82,10 +85,14 @@ struct MVSidebar: View {
                     MVComputerRow(computer: computer)
                         .tag(computer.id)
                 }
-                Label("Ajouter un ordinateur…", systemImage: "plus")
-                    .foregroundStyle(.secondary)
-                    .help("L'appairage arrive bientôt dans cette interface. En attendant : lance Moonvibe avec MOONVIBE_QML=1.")
-                    .selectionDisabled()
+                Button {
+                    model.openPairing()
+                } label: {
+                    Label("Ajouter un ordinateur…", systemImage: "plus")
+                        .foregroundStyle(.secondary)
+                }
+                .buttonStyle(.plain)
+                .selectionDisabled()
             }
 
             if !model.recents.isEmpty {
@@ -178,6 +185,8 @@ struct MVComputerRow: View {
             Circle()
                 .fill(computer.online ? Color.green : Color.secondary.opacity(0.35))
                 .frame(width: 8, height: 8)
+                .help(computer.online ? "En ligne" : "Hors ligne")
+                .accessibilityElement()
                 .accessibilityLabel(computer.online ? "En ligne" : "Hors ligne")
         }
         .padding(.vertical, 2)
@@ -235,6 +244,7 @@ struct MVComputerHome: View {
     @ObservedObject var model: MVModel
     let computer: MVComputer
     @FocusState private var gridFocused: Bool
+    @State private var confirmDelete = false
 
     private let tileMinWidth: CGFloat = 140
     private let spacing: CGFloat = 18
@@ -299,8 +309,10 @@ struct MVComputerHome: View {
                     Button("Réveiller") { model.wake(computer) }
                         .disabled(!computer.canWake || computer.online)
                     if let running = computer.runningApp {
-                        Button("Quitter \(running.name)") { model.quitRunningApp(on: computer) }
+                        Button("Quitter \(running.name)…") { model.confirmQuitComputerId = computer.id }
                     }
+                    Divider()
+                    Button("Supprimer \(computer.name)…", role: .destructive) { confirmDelete = true }
                 } label: {
                     Image(systemName: "ellipsis")
                 }
@@ -319,6 +331,11 @@ struct MVComputerHome: View {
             .accessibilityHidden(true)
         }
         .onAppear { gridFocused = true }
+        .confirmationDialog("Supprimer \(computer.name) de Moonvibe ?", isPresented: $confirmDelete) {
+            Button("Supprimer", role: .destructive) { model.delete(computer) }
+        } message: {
+            Text("Il faudra l'appairer à nouveau pour streamer. L'app Moonlight officielle n'est pas concernée.")
+        }
     }
 }
 
@@ -335,7 +352,7 @@ struct MVComputerBanner: View {
                 Text(computer.online ? "\(computer.name) n'est pas appairé" : "\(computer.name) est hors ligne")
                     .font(.system(size: 13, weight: .semibold))
                 Text(computer.online
-                     ? "L'appairage arrive bientôt ici. En attendant, lance Moonvibe avec MOONVIBE_QML=1."
+                     ? "Appaire ce Mac une fois pour pouvoir streamer."
                      : "Allume le PC ou réveille-le à distance.")
                     .font(.system(size: 12))
                     .foregroundStyle(.secondary)
@@ -343,6 +360,9 @@ struct MVComputerBanner: View {
             Spacer()
             if !computer.online && computer.canWake {
                 Button("Réveiller") { model.wake(computer) }
+                    .controlSize(.large)
+            } else if computer.online && !computer.paired {
+                Button("Appairer") { model.openPairing(for: computer) }
                     .controlSize(.large)
             }
         }
@@ -358,18 +378,34 @@ struct MVRunningBanner: View {
     let app: MVApp
 
     var body: some View {
+        let confirming = model.confirmQuitComputerId == computer.id
+
         HStack(spacing: 12) {
-            Circle().fill(Color(hex: 0x28B44B)).frame(width: 8, height: 8)
-            Text("**\(app.name)** tourne sur \(computer.name)")
-                .font(.system(size: 13))
-            Spacer()
-            Button("Quitter l'app") { model.quitRunningApp(on: computer) }
-                .disabled(model.busy)
-                .help("Ferme \(app.name) sur le PC")
+            if confirming {
+                Image(systemName: "exclamationmark.triangle.fill")
+                    .foregroundStyle(Color(hex: 0xB42318))
+                Text("Quitter **\(app.name)** sur \(computer.name) ? Le travail non enregistré sera perdu.")
+                    .font(.system(size: 13))
+                Spacer()
+                Button("Annuler") { model.confirmQuitComputerId = nil }
+                Button("Quitter", role: .destructive) { model.quitRunningApp(on: computer) }
+                    .tint(Color(hex: 0xB42318))
+                    .buttonStyle(.borderedProminent)
+            } else {
+                Circle().fill(Color(hex: 0x28B44B)).frame(width: 8, height: 8)
+                    .accessibilityHidden(true)
+                Text("**\(app.name)** tourne sur \(computer.name)")
+                    .font(.system(size: 13))
+                Spacer()
+                Button("Quitter l'app") { model.confirmQuitComputerId = computer.id }
+                    .disabled(model.busy)
+                    .help("Ferme \(app.name) sur le PC")
+            }
         }
         .padding(.horizontal, 24)
         .padding(.vertical, 10)
-        .background(Color(hex: 0x28B44B).opacity(0.08))
+        .background((confirming ? Color(hex: 0xB42318) : Color(hex: 0x28B44B)).opacity(0.08))
+        .animation(.easeInOut(duration: 0.15), value: confirming)
     }
 }
 

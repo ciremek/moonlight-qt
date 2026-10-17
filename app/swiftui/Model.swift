@@ -173,6 +173,29 @@ struct MVDisplay: Equatable {
     }
 }
 
+// MARK: - Pairing
+
+enum MVPairingStep: Equatable {
+    /// Pick a PC found on the network, or add one by address.
+    case search
+    /// Waiting for the user to type the PIN into Sunshine. The PIN is empty until the host sends it.
+    case waiting(computerId: String, pin: String)
+    case paired(computerId: String)
+    case failed(computerId: String, error: String)
+}
+
+struct MVPairingUpdate: Decodable {
+    let uuid: String
+    let stage: String
+    let pin: String?
+    let error: String?
+}
+
+struct MVAddHostResult: Decodable {
+    let success: Bool
+    let portBlocking: Bool
+}
+
 // MARK: - Recent sessions
 
 struct MVRecent: Codable, Identifiable, Hashable {
@@ -207,6 +230,13 @@ final class MVModel: ObservableObject {
     @Published var status = ""
     @Published var busy = false
     @Published var errorMessage: String?
+    @Published var showPairing = false
+    @Published var pairingStep = MVPairingStep.search
+    @Published var addingHost = false
+    @Published var addHostError: String?
+    /// Computer whose running app awaits a quit confirmation in the banner.
+    @Published var confirmQuitComputerId: String?
+    private var openedPairingForEmptyList = false
 
     var sendAction: (([String: Any]) -> Void)?
     weak var window: NSWindow?
@@ -270,6 +300,11 @@ final class MVModel: ObservableObject {
 
     func update(computers: [MVComputer]) {
         self.computers = computers
+        // No PC yet: start with pairing, once
+        if computers.isEmpty, !openedPairingForEmptyList {
+            openedPairingForEmptyList = true
+            openPairing()
+        }
         if selectedComputerId == nil || !computers.contains(where: { $0.id == selectedComputerId }) {
             selectedComputerId = computers.first(where: { $0.online && $0.paired })?.id ?? computers.first?.id
         }
@@ -328,6 +363,61 @@ final class MVModel: ObservableObject {
         launch(app, on: computer)
     }
 
+    func openPairing(for computer: MVComputer? = nil) {
+        addHostError = nil
+        pairingStep = .search
+        showPairing = true
+        if let computer { pair(computer) }
+    }
+
+    func pair(_ computer: MVComputer) {
+        pairingStep = .waiting(computerId: computer.id, pin: "")
+        sendAction?(["action": "pair", "uuid": computer.uuid])
+    }
+
+    func update(pairing: MVPairingUpdate) {
+        switch pairing.stage {
+        case "waiting": pairingStep = .waiting(computerId: pairing.uuid, pin: pairing.pin ?? "")
+        case "paired": pairingStep = .paired(computerId: pairing.uuid)
+        default: pairingStep = .failed(computerId: pairing.uuid, error: pairing.error ?? "L'appairage a échoué.")
+        }
+    }
+
+    func addHost(_ address: String) {
+        let trimmed = address.trimmingCharacters(in: .whitespaces)
+        guard !trimmed.isEmpty, !addingHost else { return }
+        addingHost = true
+        addHostError = nil
+        sendAction?(["action": "addHost", "address": trimmed])
+    }
+
+    func update(addHost result: MVAddHostResult) {
+        addingHost = false
+        if !result.success {
+            addHostError = result.portBlocking
+                ? "PC injoignable : ton réseau semble bloquer la connexion."
+                : "PC introuvable à cette adresse. Vérifie qu'il est allumé et que Sunshine tourne."
+        }
+    }
+
+    func finishPairing() {
+        if case .paired(let computerId) = pairingStep {
+            selectedComputerId = computerId
+            selectedAppId = nil
+        }
+        showPairing = false
+        pairingStep = .search
+    }
+
+    func delete(_ computer: MVComputer) {
+        if selectedComputerId == computer.id { selectedComputerId = nil }
+        recents.removeAll { $0.computerId == computer.id }
+        if let data = try? JSONEncoder().encode(recents) {
+            UserDefaults.standard.set(data, forKey: Self.recentsKey)
+        }
+        sendAction?(["action": "deleteHost", "uuid": computer.uuid])
+    }
+
     func cancelLaunch() {
         guard busy else { return }
         sendAction?(["action": "cancel"])
@@ -338,6 +428,7 @@ final class MVModel: ObservableObject {
     }
 
     func quitRunningApp(on computer: MVComputer) {
+        confirmQuitComputerId = nil
         status = "Fermeture de l'app en cours sur \(computer.name)…"
         sendAction?(["action": "quitApp", "uuid": computer.uuid])
     }

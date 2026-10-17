@@ -11,9 +11,13 @@
 // - prefs: {resolutionMode, width, height, fps, bitrateKbps, windowMode,
 //           vsync, framePacing, hdr, muteHost, disableAwdl}
 // - status: {text, busy, error}
+// - pairing: {uuid, stage: "waiting" | "paired" | "failed", pin, error}
+// - add host result: {success, portBlocking}
 // - actions sent back by the shell: {action: "launch", uuid, appId, displayX, displayY}
 //   | {action: "cancel"} | {action: "wake", uuid} | {action: "quitApp", uuid}
-//   | {action: "setPrefs", prefs} | {action: "quit"}
+//   | {action: "setPrefs", prefs} | {action: "pair", uuid} | {action: "addHost", address}
+//   | {action: "deleteHost", uuid}
+//   | {action: "quit"}
 
 #ifdef __cplusplus
 extern "C" {
@@ -26,6 +30,8 @@ void mv_ui_update_computers(const char* json);
 void mv_ui_update_prefs(const char* json);
 void mv_ui_set_status(const char* json);
 void mv_ui_set_visible(bool visible);
+void mv_ui_update_pairing(const char* json);
+void mv_ui_add_host_result(const char* json);
 
 #ifdef __cplusplus
 }

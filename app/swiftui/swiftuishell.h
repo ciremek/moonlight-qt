@@ -28,12 +28,16 @@ public:
 private slots:
     void pushComputers();
     void handleBoxArtLoaded(NvComputer* computer, NvApp app, QUrl image);
+    void handlePairingCompleted(NvComputer* computer, QString error);
+    void handleComputerAddCompleted(QVariant success, QVariant detectedPortBlocking);
 
 private:
     static void handleAction(const char* json);
 
     void dispatch(const QJsonObject& action);
     void launch(const QString& computerUuid, int appId, const QPoint& displayOrigin);
+    void pair(const QString& computerUuid);
+    void deleteHost(const QString& computerUuid);
     void applyPrefs(const QJsonObject& prefs);
     void pushPrefs();
     void setStatus(const QString& text, bool busy, bool error = false);
@@ -47,6 +51,7 @@ private:
     BoxArtManager m_BoxArtManager;
     QHash<QString, QString> m_BoxArtPaths;
     QSet<QString> m_BoxArtRequested;
+    QSet<QString> m_DeletingUuids;
     Session* m_Session;
     QString m_LaunchError;
 };

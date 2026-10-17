@@ -17,12 +17,26 @@ struct MVQualityPopover: View {
                 }
             }
 
-            DisclosureGroup(isExpanded: $showDetails) {
-                MVQualityDetails(model: model)
-                    .padding(.top, 8)
+            // A full-width row rather than DisclosureGroup, whose only hit target is the chevron
+            Button {
+                withAnimation(.easeInOut(duration: 0.15)) { showDetails.toggle() }
             } label: {
-                Text(model.preset == .custom ? "Personnaliser · Perso" : "Personnaliser")
-                    .font(.system(size: 13, weight: .semibold))
+                HStack(spacing: 6) {
+                    Image(systemName: "chevron.right")
+                        .font(.system(size: 11, weight: .semibold))
+                        .rotationEffect(.degrees(showDetails ? 90 : 0))
+                    Text(model.preset == .custom ? "Personnaliser · Perso" : "Personnaliser")
+                        .font(.system(size: 13, weight: .semibold))
+                    Spacer()
+                }
+                .padding(.vertical, 6)
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .accessibilityAddTraits(showDetails ? .isSelected : [])
+
+            if showDetails {
+                MVQualityDetails(model: model)
             }
         }
         .padding(18)
@@ -94,24 +108,54 @@ struct MVQualityDetails: View {
         return options.contains(model.prefs.fps) ? options : (options + [model.prefs.fps]).sorted()
     }
 
-    private func resolutionLabel(_ mode: MVResolutionMode) -> String {
-        let (width, height) = model.display.resolution(for: mode, prefs: model.prefs)
+    /// One entry of the resolution menu: a mode that follows the display, or a fixed size.
+    private struct ResolutionChoice: Hashable {
+        let mode: MVResolutionMode
+        var width = 0
+        var height = 0
+    }
+
+    private static let fixedSizes = [(1280, 720), (1920, 1080), (2560, 1440), (3840, 2160)]
+
+    private var relativeChoices: [ResolutionChoice] {
+        var modes: [MVResolutionMode] = [.native]
+        if model.display.hasNotch { modes.append(.safeArea) }
+        modes += [.scaled75, .scaled50]
+        return modes.map { ResolutionChoice(mode: $0) }
+    }
+
+    private var fixedChoices: [ResolutionChoice] {
+        var sizes = Self.fixedSizes
+        // Keep a custom size set elsewhere (old settings) selectable
+        if model.prefs.resolutionMode == .fixed, !sizes.contains(where: { $0 == (model.prefs.width, model.prefs.height) }) {
+            sizes.append((model.prefs.width, model.prefs.height))
+        }
+        return sizes.map { ResolutionChoice(mode: .fixed, width: $0.0, height: $0.1) }
+    }
+
+    private var currentChoice: ResolutionChoice {
+        model.prefs.resolutionMode == .fixed
+            ? ResolutionChoice(mode: .fixed, width: model.prefs.width, height: model.prefs.height)
+            : ResolutionChoice(mode: model.prefs.resolutionMode)
+    }
+
+    private func label(_ choice: ResolutionChoice) -> String {
+        let (width, height) = model.display.resolution(for: choice.mode, prefs: model.prefs)
         let size = "\(width)×\(height)"
-        switch mode {
+        switch choice.mode {
         case .native: return "Natif · \(size)"
         case .safeArea: return "Natif sans encoche · \(size)"
         case .scaled75: return "75 % · \(size)"
         case .scaled50: return "50 % · \(size)"
-        case .fixed: return "Perso · \(size)"
+        case .fixed:
+            switch (choice.width, choice.height) {
+            case (1280, 720): return "720p · 1280×720"
+            case (1920, 1080): return "1080p · 1920×1080"
+            case (2560, 1440): return "1440p · 2560×1440"
+            case (3840, 2160): return "4K · 3840×2160"
+            default: return "Perso · \(choice.width)×\(choice.height)"
+            }
         }
-    }
-
-    private var resolutionModes: [MVResolutionMode] {
-        var modes: [MVResolutionMode] = [.native]
-        if model.display.hasNotch { modes.append(.safeArea) }
-        modes += [.scaled75, .scaled50]
-        if model.prefs.resolutionMode == .fixed { modes.append(.fixed) }
-        return modes
     }
 
     var body: some View {
@@ -120,10 +164,23 @@ struct MVQualityDetails: View {
                 GridRow {
                     Text("Résolution").gridColumnAlignment(.trailing)
                     Picker("Résolution", selection: Binding(
-                        get: { model.prefs.resolutionMode },
-                        set: { mode in model.setPrefs { $0.resolutionMode = mode } }
+                        get: { currentChoice },
+                        set: { choice in
+                            model.setPrefs {
+                                $0.resolutionMode = choice.mode
+                                if choice.mode == .fixed {
+                                    $0.width = choice.width
+                                    $0.height = choice.height
+                                }
+                            }
+                        }
                     )) {
-                        ForEach(resolutionModes, id: \.self) { Text(resolutionLabel($0)).tag($0) }
+                        Section("Selon ton écran") {
+                            ForEach(relativeChoices, id: \.self) { Text(label($0)).tag($0) }
+                        }
+                        Section("Fixe") {
+                            ForEach(fixedChoices, id: \.self) { Text(label($0)).tag($0) }
+                        }
                     }
                     .labelsHidden()
                 }

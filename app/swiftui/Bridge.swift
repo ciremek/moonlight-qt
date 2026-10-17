@@ -103,6 +103,22 @@ public func mvUiSetStatus(_ json: UnsafePointer<CChar>) {
     }
 }
 
+@_cdecl("mv_ui_update_pairing")
+public func mvUiUpdatePairing(_ json: UnsafePointer<CChar>) {
+    guard let update = decode(MVPairingUpdate.self, from: json) else { return }
+    MainActor.assumeIsolated {
+        MVWindowController.shared?.model.update(pairing: update)
+    }
+}
+
+@_cdecl("mv_ui_add_host_result")
+public func mvUiAddHostResult(_ json: UnsafePointer<CChar>) {
+    guard let result = decode(MVAddHostResult.self, from: json) else { return }
+    MainActor.assumeIsolated {
+        MVWindowController.shared?.model.update(addHost: result)
+    }
+}
+
 @_cdecl("mv_ui_set_visible")
 public func mvUiSetVisible(_ visible: Bool) {
     MainActor.assumeIsolated {
