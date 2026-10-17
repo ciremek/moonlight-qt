@@ -562,7 +562,19 @@ macx {
 
     QMAKE_INFO_PLIST = $$OUT_PWD/Info.plist
 
-    APP_BUNDLE_RESOURCES.files = moonvibe.icns
+    # moonvibe.icns is the single-appearance fallback; Assets.car carries the
+    # light/dark icon from Moonvibe.icon (Icon Composer format), compiled by actool
+    APP_ICON_SOURCES = $$PWD/Moonvibe.icon/icon.json $$files($$PWD/Moonvibe.icon/Assets/*)
+    appicon.target = Assets.car
+    appicon.depends = $$APP_ICON_SOURCES
+    appicon.commands = mkdir -p $$OUT_PWD/appicon && xcrun actool $$PWD/Moonvibe.icon --compile $$OUT_PWD/appicon \
+        --platform macosx --minimum-deployment-target 14.4 --target-device mac \
+        --app-icon Moonvibe --output-partial-info-plist $$OUT_PWD/appicon/partial.plist \
+        && cp $$OUT_PWD/appicon/Assets.car Assets.car
+    QMAKE_EXTRA_TARGETS += appicon
+    PRE_TARGETDEPS += Assets.car
+
+    APP_BUNDLE_RESOURCES.files = moonvibe.icns $$OUT_PWD/Assets.car
     APP_BUNDLE_RESOURCES.path = Contents/Resources
 
     APP_BUNDLE_PLIST.files = $$OUT_PWD/Info.plist

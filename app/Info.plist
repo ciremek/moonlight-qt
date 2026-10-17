@@ -12,6 +12,8 @@
 	<string>Stream games and other applications from another PC</string>
 	<key>CFBundleIconFile</key>
 	<string>moonvibe</string>
+	<key>CFBundleIconName</key>
+	<string>Moonvibe</string>
 	<key>CFBundleIdentifier</key>
 	<string>io.github.ciremek.Moonvibe</string>
 	<key>NSHighResolutionCapable</key>
