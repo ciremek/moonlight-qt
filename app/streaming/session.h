@@ -102,6 +102,9 @@ public:
     virtual ~Session();
 
     Q_INVOKABLE bool initialize(QQuickWindow* qtWindow);
+
+    // Global top-left corner of the display to stream on, for UIs without a Qt window
+    void setDisplayOrigin(const QPoint& origin);
     Q_INVOKABLE void start();
     Q_INVOKABLE void interrupt();
     Q_PROPERTY(QStringList launchWarnings MEMBER m_LaunchWarnings NOTIFY launchWarningsChanged);
@@ -260,6 +263,8 @@ private:
     bool m_AudioMuted;
     Uint32 m_FullScreenFlag;
     QQuickWindow* m_QtWindow;
+    QPoint m_DisplayOrigin;
+    bool m_HasDisplayOrigin;
     bool m_UnexpectedTermination;
     SdlInputHandler* m_InputHandler;
     int m_MouseEmulationRefCount;

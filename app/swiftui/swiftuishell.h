@@ -1,13 +1,21 @@
 #pragma once
 
+#include <QHash>
+#include <QJsonObject>
 #include <QObject>
+#include <QPoint>
+#include <QSet>
 #include <QString>
 
+#include "backend/boxartmanager.h"
+
 class ComputerManager;
+class NvComputer;
 class Session;
+class StreamingPreferences;
 
 // Hosts the SwiftUI shell on top of the existing Qt backend: it feeds the
-// shell with computers and apps, and runs streaming sessions it requests.
+// shell with computers, apps and preferences, and runs the actions it requests.
 class SwiftUIShell : public QObject
 {
     Q_OBJECT
@@ -19,17 +27,26 @@ public:
 
 private slots:
     void pushComputers();
+    void handleBoxArtLoaded(NvComputer* computer, NvApp app, QUrl image);
 
 private:
-    static void handleLaunchRequest(const char* computerUuid, int appId);
-    static void handleQuitRequest();
+    static void handleAction(const char* json);
 
-    void launch(const QString& computerUuid, int appId);
-    void setStatus(const QString& text, bool busy);
+    void dispatch(const QJsonObject& action);
+    void launch(const QString& computerUuid, int appId, const QPoint& displayOrigin);
+    void applyPrefs(const QJsonObject& prefs);
+    void pushPrefs();
+    void setStatus(const QString& text, bool busy, bool error = false);
+    NvComputer* findComputer(const QString& uuid);
+    QString boxArtPath(NvComputer* computer, NvApp& app);
 
     static SwiftUIShell* s_Instance;
 
     ComputerManager* m_ComputerManager;
+    StreamingPreferences* m_Prefs;
+    BoxArtManager m_BoxArtManager;
+    QHash<QString, QString> m_BoxArtPaths;
+    QSet<QString> m_BoxArtRequested;
     Session* m_Session;
     QString m_LaunchError;
 };

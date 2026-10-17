@@ -575,6 +575,7 @@ Session::Session(NvComputer* computer, NvApp& app, StreamingPreferences *prefere
       m_DecoderLock(SDL_CreateMutex()),
       m_AudioMuted(false),
       m_QtWindow(nullptr),
+      m_HasDisplayOrigin(false),
       m_UnexpectedTermination(true), // Failure prior to streaming is unexpected
       m_InputHandler(nullptr),
       m_MouseEmulationRefCount(0),
@@ -597,6 +598,12 @@ Session::~Session()
     SDL_DestroyMutex(m_DecoderLock);
 }
 
+void Session::setDisplayOrigin(const QPoint& origin)
+{
+    m_DisplayOrigin = origin;
+    m_HasDisplayOrigin = true;
+}
+
 void Session::applyAutoResolution()
 {
     if (m_Preferences->resolutionMode == StreamingPreferences::RM_FIXED) {
@@ -606,8 +613,8 @@ void Session::applyAutoResolution()
     // Match the display hosting the Qt UI, since the stream window opens there
     int displayIndex = 0;
     QScreen* screen = m_QtWindow != nullptr ? m_QtWindow->screen() : nullptr;
-    if (screen != nullptr) {
-        QPoint origin = screen->geometry().topLeft();
+    if (screen != nullptr || m_HasDisplayOrigin) {
+        QPoint origin = screen != nullptr ? screen->geometry().topLeft() : m_DisplayOrigin;
         int matchedIndex = StreamUtils::getDisplayIndexAtOrigin(origin.x(), origin.y());
         if (matchedIndex >= 0) {
             displayIndex = matchedIndex;
@@ -626,6 +633,19 @@ void Session::applyAutoResolution()
     bool useSafeArea = m_Preferences->resolutionMode == StreamingPreferences::RM_AUTO_SAFE_AREA;
     m_Preferences->width = useSafeArea ? safeArea.w : desktopMode.w;
     m_Preferences->height = useSafeArea ? safeArea.h : desktopMode.h;
+
+    // Scaled modes keep the native aspect ratio, rounded down to encoder-friendly multiples of 8
+    int scalePercent = 100;
+    if (m_Preferences->resolutionMode == StreamingPreferences::RM_AUTO_SCALED_75) {
+        scalePercent = 75;
+    }
+    else if (m_Preferences->resolutionMode == StreamingPreferences::RM_AUTO_SCALED_50) {
+        scalePercent = 50;
+    }
+    if (scalePercent != 100) {
+        m_Preferences->width = (m_Preferences->width * scalePercent / 100) & ~7;
+        m_Preferences->height = (m_Preferences->height * scalePercent / 100) & ~7;
+    }
 
     if (m_Preferences->autoAdjustBitrate) {
         m_Preferences->bitrateKbps = StreamingPreferences::getDefaultBitrate(m_Preferences->width,
@@ -1375,6 +1395,17 @@ void Session::getWindowDimensions(int& x, int& y,
     if (m_Window != nullptr) {
         displayIndex = SDL_GetWindowDisplayIndex(m_Window);
         SDL_assert(displayIndex >= 0);
+    }
+    // Create our window on the display requested by a UI without a Qt window
+    else if (m_QtWindow == nullptr && m_HasDisplayOrigin) {
+        for (int i = 0; i < SDL_GetNumVideoDisplays(); i++) {
+            SDL_Rect displayBounds;
+            if (SDL_GetDisplayBounds(i, &displayBounds) == 0 &&
+                displayBounds.x == m_DisplayOrigin.x() && displayBounds.y == m_DisplayOrigin.y()) {
+                displayIndex = i;
+                break;
+            }
+        }
     }
     // Create our window on the same display that Qt's UI
     // was being displayed on.

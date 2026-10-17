@@ -124,6 +124,9 @@ public:
         RM_FIXED,
         RM_AUTO_NATIVE,
         RM_AUTO_SAFE_AREA,
+        // Native aspect ratio scaled down, for the Moonvibe presets
+        RM_AUTO_SCALED_75,
+        RM_AUTO_SCALED_50,
     };
     Q_ENUM(ResolutionMode);
 
