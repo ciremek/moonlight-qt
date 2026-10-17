@@ -1,0 +1,29 @@
+Moonvibe · icône « Equalizer Moon » · double icône
+
+Le principe : une icône par apparence de macOS, avec le même dessin.
+  - Apparence claire (par défaut) : Phase lavande  -> dossier clair-phase-lavande
+  - Apparence sombre : Phase nocturne             -> dossier sombre-phase-nocturne
+
+Contenu de chaque dossier :
+  - <nom>.svg : master vectoriel 1024 × 1024 (squircle 824 × 824 centré, 9 barres)
+  - <nom>-petites-tailles.svg : version 5 barres, pour 16 et 32 px
+  - <nom>-1024.png : PNG 1024
+  - Moonvibe.iconset : les 10 PNG attendus par macOS (16 à 512 @1x et @2x).
+    Les tailles 16 et 32 px utilisent déjà la version 5 barres.
+
+1) macOS 26 Tahoe : la vraie double icône
+   Les apparences claire et sombre de l’icône se règlent dans Icon Composer (fichier .icon
+   ajouté au projet Xcode). Un .icns classique ne porte qu’une seule icône (à confirmer dans la doc Apple).
+   Le dossier calques-icon-composer contient, pour chaque apparence, 3 calques plein cadre
+   sans masque (Icon Composer applique le squircle et l’effet verre) :
+     1-fond.svg, 2-barres-eteintes.svg, 3-croissant.svg
+   Icon Composer utilise le même dessin à toutes les tailles : vérifier son aperçu à 32 px.
+
+2) Repli pour les macOS plus anciens (.icns, une seule icône)
+   Prendre la Phase nocturne, qui tient mieux seule sur un Dock clair comme sombre :
+     iconutil -c icns "sombre-phase-nocturne/Moonvibe.iconset" -o Moonvibe.icns
+
+Glyphe barre des menus (pour la future version barre des menus) :
+  glyphe-barre-des-menus.svg / .png (18 px) / @2x.png (36 px)
+  Image « template » : noir + transparence. Côté code : NSImage.isTemplate = true,
+  macOS la recolore tout seul en clair ou en sombre.
