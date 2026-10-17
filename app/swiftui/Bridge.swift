@@ -99,6 +99,7 @@ public func mvUiSetStatus(_ json: UnsafePointer<CChar>) {
         model.busy = status.busy
         if status.error {
             model.status = ""
+            model.cancelPendingLaunch()
             model.errorMessage = status.text
         } else {
             model.status = status.text

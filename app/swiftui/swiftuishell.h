@@ -6,8 +6,9 @@
 #include <QPoint>
 #include <QSet>
 #include <QString>
+#include <QTimer>
 
-#include "backend/boxartmanager.h"
+#include "backend/nvapp.h"
 
 class ComputerManager;
 class NvComputer;
@@ -27,7 +28,6 @@ public:
 
 private slots:
     void pushComputers();
-    void handleBoxArtLoaded(NvComputer* computer, NvApp app, QUrl image);
     void handlePairingCompleted(NvComputer* computer, QString error);
     void handleComputerAddCompleted(QVariant success, QVariant detectedPortBlocking);
 
@@ -42,17 +42,17 @@ private:
     void applyPrefs(const QJsonObject& prefs);
     void pushPrefs();
     void setStatus(const QString& text, bool busy, bool error = false);
+    void setPolling(bool enabled);
+    void handleApplicationStateChanged(Qt::ApplicationState state);
     NvComputer* findComputer(const QString& uuid);
-    QString boxArtPath(NvComputer* computer, NvApp& app);
 
     static SwiftUIShell* s_Instance;
 
     ComputerManager* m_ComputerManager;
     StreamingPreferences* m_Prefs;
-    BoxArtManager m_BoxArtManager;
-    QHash<QString, QString> m_BoxArtPaths;
-    QSet<QString> m_BoxArtRequested;
     QSet<QString> m_DeletingUuids;
     Session* m_Session;
+    bool m_Polling;
+    QTimer m_InactivityTimer;
     QString m_LaunchError;
 };

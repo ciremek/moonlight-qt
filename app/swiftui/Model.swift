@@ -8,7 +8,6 @@ import SwiftUI
 struct MVApp: Decodable, Identifiable, Hashable {
     let id: Int
     let name: String
-    let boxArt: String
 
     /// Short description under well-known Sunshine/Apollo apps.
     var subtitle: String? {
@@ -108,7 +107,7 @@ struct MVPrefs: Codable, Equatable {
     var showStats = false
     var connectionWarnings = true
     var configurationWarnings = true
-    var richPresence = true
+    var richPresence = false
 
     var maxBitrateMbps: Int { unlockBitrate ? 500 : 150 }
 }
@@ -248,6 +247,11 @@ struct MVAddHostResult: Decodable {
     let portBlocking: Bool
 }
 
+struct MVAppRef: Equatable {
+    let computerId: String
+    let appId: Int
+}
+
 // MARK: - Recent sessions
 
 struct MVRecent: Codable, Identifiable, Hashable {
@@ -290,6 +294,11 @@ final class MVModel: ObservableObject {
     @Published var addHostError: String?
     /// Computer whose running app awaits a quit confirmation in the banner.
     @Published var confirmQuitComputerId: String?
+    /// App the user wants to launch while another one runs on the same PC: the banner
+    /// asks to quit the running one first.
+    @Published var confirmSwitch: MVAppRef?
+    /// App to launch once the PC reports its running app has quit.
+    private var launchAfterQuit: MVAppRef?
     private var openedPairingForEmptyList = false
 
     var sendAction: (([String: Any]) -> Void)?
@@ -335,8 +344,21 @@ final class MVModel: ObservableObject {
         MVPreset.builtIn.first { preset in
             prefs.resolutionMode == preset.resolutionMode &&
             prefs.bitrateKbps == preset.bitrateKbps &&
-            prefs.fps == display.maxFps
+            (fpsFollowsDisplay || prefs.fps == display.maxFps)
         } ?? .custom
+    }
+
+    /// Built-in presets stream at the highest frame rate of the display the stream opens
+    /// on, resolved at launch: a preset picked on a 120 Hz MacBook drops to 60 on a 60 Hz
+    /// screen instead of streaming frames it can't show.
+    @Published private(set) var fpsFollowsDisplay = UserDefaults.standard.bool(forKey: "MoonvibeFpsFollowsDisplay") {
+        didSet { UserDefaults.standard.set(fpsFollowsDisplay, forKey: "MoonvibeFpsFollowsDisplay") }
+    }
+
+    /// A frame rate picked by hand.
+    func setFps(_ fps: Int) {
+        fpsFollowsDisplay = fps == display.maxFps
+        setPrefs { $0.fps = fps }
     }
 
     /// Resolution · frame rate · bitrate a preset streams at, on the current display.
@@ -368,6 +390,15 @@ final class MVModel: ObservableObject {
 
     func update(computers: [MVComputer]) {
         self.computers = computers
+        // Launch the app waiting for the previous one to quit
+        if let pending = launchAfterQuit,
+           let computer = computers.first(where: { $0.id == pending.computerId }),
+           computer.online, computer.runningAppId == 0,
+           let app = computer.apps.first(where: { $0.id == pending.appId }) {
+            launchAfterQuit = nil
+            launch(app, on: computer)
+        }
+
         // No PC yet: start with pairing, once
         if computers.isEmpty, !openedPairingForEmptyList {
             openedPairingForEmptyList = true
@@ -427,6 +458,7 @@ final class MVModel: ObservableObject {
     func apply(_ preset: MVPreset) {
         if preset == .custom {
             guard let custom = customPreset else { return }
+            fpsFollowsDisplay = false
             setPrefs {
                 $0.resolutionMode = custom.resolutionMode
                 $0.width = custom.width
@@ -436,6 +468,7 @@ final class MVModel: ObservableObject {
             }
             return
         }
+        fpsFollowsDisplay = true
         setPrefs {
             $0.resolutionMode = preset.resolutionMode
             $0.bitrateKbps = preset.bitrateKbps
@@ -446,6 +479,10 @@ final class MVModel: ObservableObject {
     func launch(_ app: MVApp, on computer: MVComputer) {
         guard canLaunch(on: computer) else { return }
         refreshDisplay()
+        // Sent before the launch, so the host applies it to this stream
+        if fpsFollowsDisplay, prefs.fps != display.maxFps {
+            setPrefs { $0.fps = display.maxFps }
+        }
         busy = true
         status = "Connexion à \(computer.name)…"
         rememberRecent(app, on: computer)
@@ -463,7 +500,32 @@ final class MVModel: ObservableObject {
               let app = computer.apps.first(where: { $0.id == recent.appId }) else { return }
         selectedComputerId = computer.id
         selectedAppId = app.id
+        requestLaunch(app, on: computer)
+    }
+
+    /// Launches an app, or first asks to quit the other app running on the PC: the host
+    /// refuses to start a second one.
+    func requestLaunch(_ app: MVApp, on computer: MVComputer) {
+        if computer.runningAppId != 0, computer.runningAppId != app.id {
+            selectedComputerId = computer.id
+            selectedAppId = app.id
+            confirmQuitComputerId = nil
+            confirmSwitch = MVAppRef(computerId: computer.id, appId: app.id)
+            return
+        }
         launch(app, on: computer)
+    }
+
+    func quitAndLaunch(_ app: MVApp, on computer: MVComputer) {
+        confirmSwitch = nil
+        launchAfterQuit = MVAppRef(computerId: computer.id, appId: app.id)
+        quitRunningApp(on: computer)
+        status = "Fermeture de \(computer.runningApp?.name ?? "l'app en cours"), puis lancement de \(app.name)…"
+    }
+
+    /// The host failed to quit the app: drop the launch waiting for it.
+    func cancelPendingLaunch() {
+        launchAfterQuit = nil
     }
 
     func openPairing(for computer: MVComputer? = nil) {

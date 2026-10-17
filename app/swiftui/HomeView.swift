@@ -273,7 +273,7 @@ struct MVComputerHome: View {
                                           highlighted: app.id == selected?.id,
                                           running: app.id == computer.runningAppId,
                                           enabled: computer.online && computer.paired)
-                                    .onTapGesture(count: 2) { model.launch(app, on: computer) }
+                                    .onTapGesture(count: 2) { model.requestLaunch(app, on: computer) }
                                     .simultaneousGesture(TapGesture().onEnded {
                                         model.selectedAppId = app.id
                                         gridFocused = true
@@ -324,7 +324,7 @@ struct MVComputerHome: View {
             // ⌘1, ⌘2, ⌘3 launch the first apps
             Group {
                 ForEach(Array(apps.prefix(3).enumerated()), id: \.element.id) { index, app in
-                    Button("Lancer \(app.name)") { model.launch(app, on: computer) }
+                    Button("Lancer \(app.name)") { model.requestLaunch(app, on: computer) }
                         .keyboardShortcut(KeyEquivalent(Character("\(index + 1)")), modifiers: .command)
                 }
             }
@@ -379,10 +379,24 @@ struct MVRunningBanner: View {
     let app: MVApp
 
     var body: some View {
-        let confirming = model.confirmQuitComputerId == computer.id
+        let switchTarget = model.confirmSwitch.flatMap { pending in
+            pending.computerId == computer.id ? computer.apps.first { $0.id == pending.appId } : nil
+        }
+        let confirming = model.confirmQuitComputerId == computer.id || switchTarget != nil
 
         HStack(spacing: 12) {
-            if confirming {
+            if let target = switchTarget {
+                Image(systemName: "exclamationmark.triangle.fill")
+                    .foregroundStyle(Color(hex: 0xB42318))
+                Text("**\(app.name)** tourne déjà sur \(computer.name). Le quitter pour lancer \(target.name) ? Le travail non enregistré sera perdu.")
+                    .font(.system(size: 13))
+                    .fixedSize(horizontal: false, vertical: true)
+                Spacer()
+                Button("Annuler") { model.confirmSwitch = nil }
+                Button("Quitter et lancer", role: .destructive) { model.quitAndLaunch(target, on: computer) }
+                    .tint(Color(hex: 0xB42318))
+                    .buttonStyle(.borderedProminent)
+            } else if confirming {
                 Image(systemName: "exclamationmark.triangle.fill")
                     .foregroundStyle(Color(hex: 0xB42318))
                 Text("Quitter **\(app.name)** sur \(computer.name) ? Le travail non enregistré sera perdu.")
@@ -503,7 +517,7 @@ struct MVLaunchBar: View {
                 MVPrimaryButton(title: "\(resuming ? "Reprendre" : "Lancer") \(app.name)",
                                 busy: model.busy,
                                 disabled: !model.canLaunch(on: computer)) {
-                    model.launch(app, on: computer)
+                    model.requestLaunch(app, on: computer)
                 }
                 .fixedSize()
                 .help("Pendant le stream : ⌃⌥⇧Q pour quitter, ⌃⌥⇧S pour les stats, ⌃⌥⇧Z pour libérer la souris")

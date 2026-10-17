@@ -54,7 +54,12 @@ final class MVOverlayModel: ObservableObject {
 
 /// A borderless panel that never becomes key, so the stream window keeps the keyboard.
 final class MVOverlayPanel: NSPanel {
+    let interactive: Bool
+    var fadingIn = false
+    var fadingOut = false
+
     init(interactive: Bool) {
+        self.interactive = interactive
         super.init(contentRect: .zero, styleMask: [.borderless, .nonactivatingPanel],
                    backing: .buffered, defer: false)
         isOpaque = false
@@ -103,6 +108,9 @@ final class MVStreamOverlay {
     private let reminderPanel = MVOverlayPanel(interactive: false)
     private var timer: Timer?
 
+    /// Measured size per panel, with the state it was measured for: SwiftUI layout only
+    /// runs again when that state changes, not on every tick of the main thread.
+    private var measuredSizes: [ObjectIdentifier: (key: String, size: NSSize)] = [:]
     private var barHideDate = Date.distantPast
     private var reminderHideDate = Date.distantPast
     private var wasCaptured = false
@@ -124,10 +132,6 @@ final class MVStreamOverlay {
         statsPanel.host(MVStatsCard(model: model))
         reminderPanel.host(MVReminder())
 
-        for panel in [statsPanel, reminderPanel, barPanel] {
-            streamWindow.addChildWindow(panel, ordered: .above)
-        }
-
         // Remind the shortcuts on the first streams
         let shown = UserDefaults.standard.integer(forKey: Self.reminderCountKey)
         if shown < Self.reminderShowCount {
@@ -146,7 +150,7 @@ final class MVStreamOverlay {
     func end() {
         timer?.invalidate()
         timer = nil
-        for panel in [statsPanel, reminderPanel, barPanel] {
+        for panel in [statsPanel, reminderPanel, barPanel] where panel.parent != nil {
             streamWindow.removeChildWindow(panel)
             panel.orderOut(nil)
         }
@@ -170,7 +174,7 @@ final class MVStreamOverlay {
             if wasCaptured { barHideDate = now.addingTimeInterval(2.5) }
             let mouse = NSEvent.mouseLocation
             let atTopEdge = content.contains(mouse) && mouse.y >= content.maxY - 8
-            if atTopEdge || barPanel.frame.contains(mouse) {
+            if atTopEdge || (barPanel.isVisible && barPanel.frame.contains(mouse)) {
                 barHideDate = now.addingTimeInterval(2)
             }
         }
@@ -179,20 +183,27 @@ final class MVStreamOverlay {
         // Panels hug their content, so text never truncates and clicks outside the
         // bar's capsule area still reach the stream
         let offset = Self.shadowMargin - edgeInset
-        let bar = fittingSize(barPanel)
-        place(barPanel, size: bar, x: content.midX - bar.width / 2, y: content.maxY - bar.height + offset)
-        let stats = fittingSize(statsPanel)
-        place(statsPanel, size: stats, x: content.maxX - stats.width + offset, y: content.maxY - stats.height + offset)
-        let reminder = fittingSize(reminderPanel)
-        place(reminderPanel, size: reminder, x: content.midX - reminder.width / 2, y: content.minY - offset)
-
-        show(barPanel, now < barHideDate)
-        show(statsPanel, model.statsVisible)
-        show(reminderPanel, now < reminderHideDate)
+        if show(barPanel, now < barHideDate) {
+            let bar = size(of: barPanel, for: "\(captured)\(model.fullscreen)\(model.statsVisible)")
+            place(barPanel, size: bar, x: content.midX - bar.width / 2, y: content.maxY - bar.height + offset)
+        }
+        if show(statsPanel, model.statsVisible) {
+            let stats = size(of: statsPanel, for: "\(model.stats == nil)")
+            place(statsPanel, size: stats, x: content.maxX - stats.width + offset, y: content.maxY - stats.height + offset)
+        }
+        if show(reminderPanel, now < reminderHideDate) {
+            let reminder = size(of: reminderPanel, for: "")
+            place(reminderPanel, size: reminder, x: content.midX - reminder.width / 2, y: content.minY - offset)
+        }
     }
 
-    private func fittingSize(_ panel: MVOverlayPanel) -> NSSize {
-        panel.measure()
+    private func size(of panel: MVOverlayPanel, for key: String) -> NSSize {
+        if let cached = measuredSizes[ObjectIdentifier(panel)], cached.key == key {
+            return cached.size
+        }
+        let size = panel.measure()
+        measuredSizes[ObjectIdentifier(panel)] = (key, size)
+        return size
     }
 
     private func place(_ panel: NSPanel, size: NSSize, x: CGFloat, y: CGFloat) {
@@ -202,16 +213,45 @@ final class MVStreamOverlay {
         }
     }
 
-    private func show(_ panel: NSPanel, _ visible: Bool) {
-        let target: CGFloat = visible ? 1 : 0
-        guard panel.alphaValue != target else { return }
+    /// Fades a panel in or out. Hidden panels are taken off screen entirely rather than
+    /// left transparent, so the window server has nothing to composite over the video.
+    /// Returns whether the panel is on screen, to be laid out.
+    @discardableResult
+    private func show(_ panel: MVOverlayPanel, _ visible: Bool) -> Bool {
+        if visible {
+            if panel.parent == nil {
+                panel.alphaValue = 0
+                streamWindow.addChildWindow(panel, ordered: .above)
+            }
+            if panel.alphaValue < 1, !panel.fadingIn {
+                panel.fadingIn = true
+                NSAnimationContext.runAnimationGroup { context in
+                    context.duration = 0.18
+                    panel.animator().alphaValue = 1
+                } completionHandler: {
+                    panel.fadingIn = false
+                }
+            }
+            panel.ignoresMouseEvents = !panel.interactive
+            return true
+        }
+
+        guard panel.parent != nil, !panel.fadingOut else { return panel.parent != nil }
+        panel.fadingOut = true
+        panel.ignoresMouseEvents = true
         NSAnimationContext.runAnimationGroup { context in
             context.duration = 0.18
-            panel.animator().alphaValue = target
+            panel.animator().alphaValue = 0
+        } completionHandler: { [weak self] in
+            MainActor.assumeIsolated {
+                panel.fadingOut = false
+                // It may have been asked back while fading out
+                guard let self, panel.alphaValue == 0, panel.parent != nil, !panel.fadingIn else { return }
+                self.streamWindow.removeChildWindow(panel)
+                panel.orderOut(nil)
+            }
         }
-        if panel === barPanel {
-            panel.ignoresMouseEvents = !visible
-        }
+        return true
     }
 }
 

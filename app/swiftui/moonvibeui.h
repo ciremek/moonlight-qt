@@ -7,7 +7,7 @@
 //
 // Data crosses the bridge as UTF-8 JSON:
 // - computers: [{uuid, name, online, paired, canWake, runningAppId,
-//                apps: [{id, name, boxArt}]}]
+//                apps: [{id, name}]}]
 // - prefs: {resolutionMode, width, height, fps, bitrateKbps, windowMode,
 //           vsync, framePacing, hdr, muteHost, disableAwdl}
 // - status: {text, busy, error}

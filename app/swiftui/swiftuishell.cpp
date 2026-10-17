@@ -8,6 +8,7 @@
 #include "streaming/session.h"
 
 #include <QCoreApplication>
+#include <QGuiApplication>
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QTimer>
@@ -25,19 +26,32 @@ SwiftUIShell::SwiftUIShell(ComputerManager* computerManager, QObject* parent)
     : QObject(parent),
       m_ComputerManager(computerManager),
       m_Prefs(StreamingPreferences::get()),
-      m_Session(nullptr)
+      m_Session(nullptr),
+      m_Polling(false)
 {
     Q_ASSERT(s_Instance == nullptr);
     s_Instance = this;
 
     connect(m_ComputerManager, &ComputerManager::computerStateChanged,
             this, &SwiftUIShell::pushComputers, Qt::QueuedConnection);
-    connect(&m_BoxArtManager, &BoxArtManager::boxArtLoadComplete,
-            this, &SwiftUIShell::handleBoxArtLoaded);
     connect(m_ComputerManager, &ComputerManager::pairingCompleted,
             this, &SwiftUIShell::handlePairingCompleted);
     connect(m_ComputerManager, &ComputerManager::computerAddCompleted,
             this, &SwiftUIShell::handleComputerAddCompleted);
+    connect(m_ComputerManager, &ComputerManager::quitAppCompleted, this, [this](QVariant error) {
+        if (!error.isNull()) {
+            setStatus(error.toString(), false, true);
+        }
+        pushComputers();
+    });
+
+    // Like the QML UI: keep polling for 5 minutes after Moonvibe goes to the
+    // background, so PCs still show up while the user works elsewhere, then stop
+    m_InactivityTimer.setSingleShot(true);
+    m_InactivityTimer.setInterval(5 * 60 * 1000);
+    connect(&m_InactivityTimer, &QTimer::timeout, this, [this] { setPolling(false); });
+    connect(qApp, &QGuiApplication::applicationStateChanged,
+            this, &SwiftUIShell::handleApplicationStateChanged);
 }
 
 void SwiftUIShell::show()
@@ -45,36 +59,32 @@ void SwiftUIShell::show()
     mv_ui_show(&SwiftUIShell::handleAction);
     pushPrefs();
     pushComputers();
-    m_ComputerManager->startPolling();
+    setPolling(true);
 }
 
-QString SwiftUIShell::boxArtPath(NvComputer* computer, NvApp& app)
+void SwiftUIShell::setPolling(bool enabled)
 {
-    QString key = computer->uuid + ":" + QString::number(app.id);
-    auto cached = m_BoxArtPaths.constFind(key);
-    if (cached != m_BoxArtPaths.constEnd()) {
-        return *cached;
+    // ComputerManager counts start/stop calls, so keep them balanced
+    if (enabled && !m_Polling) {
+        m_ComputerManager->startPolling();
     }
+    else if (!enabled && m_Polling) {
+        m_ComputerManager->stopPollingAsync();
+    }
+    m_Polling = enabled;
+}
 
-    // Only ask once per app: the manager fetches missing art in the background
-    // and reports back through boxArtLoadComplete()
-    if (!m_BoxArtRequested.contains(key)) {
-        m_BoxArtRequested.insert(key);
-        QUrl url = m_BoxArtManager.loadBoxArt(computer, app);
-        if (url.isLocalFile()) {
-            m_BoxArtPaths.insert(key, url.toLocalFile());
-            return url.toLocalFile();
+void SwiftUIShell::handleApplicationStateChanged(Qt::ApplicationState state)
+{
+    if (state == Qt::ApplicationActive) {
+        m_InactivityTimer.stop();
+        // Polling stays off for the whole stream
+        if (m_Session == nullptr) {
+            setPolling(true);
         }
     }
-
-    return QString();
-}
-
-void SwiftUIShell::handleBoxArtLoaded(NvComputer* computer, NvApp app, QUrl image)
-{
-    if (image.isLocalFile()) {
-        m_BoxArtPaths.insert(computer->uuid + ":" + QString::number(app.id), image.toLocalFile());
-        pushComputers();
+    else if (m_Polling) {
+        m_InactivityTimer.start();
     }
 }
 
@@ -102,13 +112,13 @@ void SwiftUIShell::pushComputers()
             };
         }
 
+        // No box art: the tiles show an icon, so there's nothing to download
         QJsonArray apps;
-        for (NvApp& app : appList) {
+        for (const NvApp& app : appList) {
             if (!app.hidden) {
                 apps.append(QJsonObject {
                     { "id", app.id },
                     { "name", app.name },
-                    { "boxArt", boxArtPath(computer, app) },
                 });
             }
         }
@@ -215,8 +225,18 @@ void SwiftUIShell::applyPrefs(const QJsonObject& prefs)
 
     bool disableAwdl = prefs["disableAwdl"].toBool(m_Prefs->disableAwdl);
     if (disableAwdl && !m_Prefs->disableAwdl && !AwdlBlocker::isControlReady()) {
-        // Toggling AWDL needs a one-time admin approval
-        disableAwdl = AwdlBlocker::installSudoersRule();
+        // Toggling AWDL needs a one-time admin approval. The option turns on once it's granted.
+        disableAwdl = false;
+        AwdlBlocker::installSudoersRuleAsync(this, [this](bool ready) {
+            if (ready) {
+                m_Prefs->disableAwdl = true;
+                m_Prefs->save();
+            }
+            else {
+                setStatus(QStringLiteral("Autorisation refusée : l'AWDL reste actif pendant le stream."), false, true);
+            }
+            pushPrefs();
+        });
     }
     m_Prefs->disableAwdl = disableAwdl;
 
@@ -337,10 +357,6 @@ void SwiftUIShell::deleteHost(const QString& computerUuid)
     // Deletion finishes on a worker thread: hide the host meanwhile, then let
     // discovery bring it back as a new, unpaired PC if it is still on the network
     m_DeletingUuids.insert(computerUuid);
-    for (auto it = m_BoxArtPaths.begin(); it != m_BoxArtPaths.end();) {
-        it = it.key().startsWith(computerUuid + ":") ? m_BoxArtPaths.erase(it) : std::next(it);
-    }
-    m_BoxArtRequested.clear();
     m_ComputerManager->deleteHost(computer);
     pushComputers();
 
@@ -454,6 +470,10 @@ void SwiftUIShell::launch(const QString& computerUuid, int appId, const QPoint& 
         mv_ui_set_visible(false);
     });
     connect(m_Session, &Session::sessionFinished, this, [this](int) {
+        setPolling(true);
+        if (qApp->applicationState() != Qt::ApplicationActive) {
+            m_InactivityTimer.start();
+        }
         mv_ui_set_visible(true);
         setStatus(m_LaunchError, false, !m_LaunchError.isEmpty());
     });
@@ -471,6 +491,10 @@ void SwiftUIShell::launch(const QString& computerUuid, int appId, const QPoint& 
         m_Session = nullptr;
         return;
     }
+
+    // Polling hits the PC every few seconds over the network the stream needs
+    setPolling(false);
+    m_InactivityTimer.stop();
 
     QTimer::singleShot(0, m_Session, &Session::start);
 }

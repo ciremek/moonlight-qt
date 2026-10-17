@@ -339,7 +339,7 @@ struct MVFpsPicker: View {
     }
 
     var body: some View {
-        Picker("Images par seconde", selection: model.binding(\.fps)) {
+        Picker("Images par seconde", selection: Binding(get: { model.prefs.fps }, set: { model.setFps($0) })) {
             ForEach(options, id: \.self) { Text("\($0)").tag($0) }
         }
         .pickerStyle(.segmented)
