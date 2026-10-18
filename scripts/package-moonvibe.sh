@@ -1,0 +1,70 @@
+#!/bin/bash
+# Build Moonvibe and package it as a self-contained DMG for Apple Silicon Macs:
+# build/release/Moonvibe-<version>.dmg
+#
+# Without a Developer ID, the app is signed ad hoc: Gatekeeper asks the user to
+# confirm the first launch (see README.md).
+set -euo pipefail
+cd "$(dirname "$0")/.."
+export DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer
+
+VERSION=$(cat app/moonvibe-version.txt)
+RELEASE_DIR=build/release
+DMG=$RELEASE_DIR/Moonvibe-$VERSION.dmg
+
+# The bundle is staged outside the source tree: in a folder synced by iCloud
+# Drive, the file provider keeps tagging bundles with extended attributes
+# that codesign rejects
+STAGING=$(mktemp -d)
+trap 'rm -rf "$STAGING"' EXIT
+APP=$STAGING/Moonvibe.app
+
+fail()
+{
+    echo "$1" 1>&2
+    exit 1
+}
+
+./build-mac.sh
+
+echo "Staging Moonvibe $VERSION"
+# macdeployqt rewrites the bundle in place, so it works on a copy: the dev
+# build keeps linking against Homebrew's Qt
+cp -R build/app/Moonvibe.app "$STAGING/"
+xattr -cr "$APP"
+
+# No QML modules: the SwiftUI shell loads no QML, which only serves the
+# command line modes and the MOONVIBE_QML fallback of development builds.
+# Homebrew splits Qt into one prefix per module and links every framework
+# into /opt/homebrew/lib, which lets macdeployqt resolve what plugins need.
+echo "Bundling Qt"
+macdeployqt "$APP" -libpath=/opt/homebrew/lib || fail "macdeployqt failed!"
+
+# Plugins Moonvibe never uses, whose Qt modules (QtPdf, QtVirtualKeyboard)
+# macdeployqt can't resolve
+rm -f "$APP/Contents/PlugIns/imageformats/libqpdf.dylib"
+rm -rf "$APP/Contents/PlugIns/platforminputcontexts"
+
+# A library's own install name (otool -D) doesn't matter for loading: only
+# the libraries it loads must come from the bundle
+echo "Checking that nothing still loads from Homebrew"
+while IFS= read -r -d '' binary; do
+    file "$binary" | grep -q "Mach-O" || continue
+    ownName=$(otool -D "$binary" | tail -n +2)
+    if otool -L "$binary" | tail -n +2 | awk '{print $1}' | grep -v -x -F "${ownName:-none}" | grep -q "^/opt/homebrew/"; then
+        otool -L "$binary" | grep "/opt/homebrew/" 1>&2
+        fail "$binary still loads libraries from Homebrew"
+    fi
+done < <(find "$APP" -type f -print0)
+
+echo "Signing ad hoc"
+xattr -cr "$APP"
+codesign --force --deep --sign - "$APP" || fail "Signing failed!"
+codesign --verify --deep --strict "$APP" || fail "Signature check failed!"
+
+echo "Creating the DMG"
+ln -s /Applications "$STAGING/Applications"
+mkdir -p "$RELEASE_DIR"
+hdiutil create -volname "Moonvibe $VERSION" -srcfolder "$STAGING" -ov -format UDZO "$DMG" || fail "hdiutil failed!"
+
+echo "Built: $(pwd)/$DMG"

@@ -556,9 +556,10 @@ win32 {
     QMAKE_LFLAGS += /MANIFEST:embed /MANIFESTINPUT:$${PWD}/Moonlight.exe.manifest
 }
 macx {
-    # Create Info.plist in object dir with the correct version string
+    # Create Info.plist in object dir with the correct version string. The bundle
+    # carries Moonvibe's own version; version.txt stays the upstream Moonlight one.
     system(cp $$PWD/Info.plist $$OUT_PWD/Info.plist)
-    system(sed -i -e 's/VERSION/$$cat(version.txt)/g' $$OUT_PWD/Info.plist)
+    system(sed -i -e 's/VERSION/$$cat(moonvibe-version.txt)/g' $$OUT_PWD/Info.plist)
 
     QMAKE_INFO_PLIST = $$OUT_PWD/Info.plist
 
