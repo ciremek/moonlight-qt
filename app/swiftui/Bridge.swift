@@ -89,6 +89,7 @@ private struct MVStatus: Decodable {
     let text: String
     let busy: Bool
     let error: Bool
+    let cancellable: Bool
 }
 
 @_cdecl("mv_ui_set_status")
@@ -97,6 +98,7 @@ public func mvUiSetStatus(_ json: UnsafePointer<CChar>) {
     MainActor.assumeIsolated {
         guard let model = MVWindowController.shared?.model else { return }
         model.busy = status.busy
+        model.cancellable = status.cancellable
         if status.error {
             model.status = ""
             model.cancelPendingLaunch()

@@ -42,7 +42,7 @@ private:
     void deleteHost(const QString& computerUuid);
     void applyPrefs(const QJsonObject& prefs);
     void pushPrefs();
-    void setStatus(const QString& text, bool busy, bool error = false);
+    void setStatus(const QString& text, bool busy, bool error = false, bool cancellable = true);
     void setPolling(bool enabled);
     void handleApplicationStateChanged(Qt::ApplicationState state);
     NvComputer* findComputer(const QString& uuid);

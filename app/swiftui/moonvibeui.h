@@ -10,7 +10,7 @@
 //                apps: [{id, name}]}]
 // - prefs: {resolutionMode, width, height, fps, bitrateKbps, windowMode,
 //           vsync, framePacing, hdr, muteHost, disableAwdl}
-// - status: {text, busy, error}
+// - status: {text, busy, error, cancellable}
 // - pairing: {uuid, stage: "waiting" | "paired" | "failed", pin, error}
 // - add host result: {success, portBlocking}
 // - wake result: {uuid, sent}

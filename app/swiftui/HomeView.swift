@@ -53,7 +53,7 @@ struct MVRootView: View {
                     .keyboardShortcut(",", modifiers: .command)
                 Button("Annuler") { model.cancelLaunch() }
                     .keyboardShortcut(.cancelAction)
-                    .disabled(!model.busy)
+                    .disabled(!model.busy || !model.cancellable)
             }
             .opacity(0)
             .accessibilityHidden(true)
@@ -605,7 +605,7 @@ struct MVLaunchBar: View {
                     .help("Pendant le stream : ⌃⌥⇧Q pour quitter, ⌃⌥⇧S pour les stats, ⌃⌥⇧Z pour libérer la souris")
             }
 
-            Text(model.busy ? "\(model.status)  ·  esc pour annuler" : model.status)
+            Text(model.busy && model.cancellable ? "\(model.status)  ·  esc pour annuler" : model.status)
                 .font(.system(size: 12))
                 .foregroundStyle(.secondary)
                 .lineLimit(2)

@@ -14,6 +14,7 @@
 #include <QThreadPool>
 #include <QTimer>
 
+#include <memory>
 #include <type_traits>
 
 SwiftUIShell* SwiftUIShell::s_Instance = nullptr;
@@ -430,12 +431,13 @@ void SwiftUIShell::handleComputerAddCompleted(QVariant success, QVariant detecte
     pushComputers();
 }
 
-void SwiftUIShell::setStatus(const QString& text, bool busy, bool error)
+void SwiftUIShell::setStatus(const QString& text, bool busy, bool error, bool cancellable)
 {
     QJsonObject status {
         { "text", text },
         { "busy", busy },
         { "error", error },
+        { "cancellable", cancellable },
     };
     mv_ui_set_status(toJson(status).constData());
 }
@@ -508,12 +510,28 @@ void SwiftUIShell::launch(const QString& computerUuid, int appId, const QPoint& 
     connect(m_Session, &Session::connectionStarted, this, [] {
         mv_ui_set_visible(false);
     });
-    connect(m_Session, &Session::sessionFinished, this, [this](int) {
+    // Brings Home back once, when the stream window goes away. With "quit the app after
+    // streaming", that's before the quit request, which waits up to 30 seconds for a PC
+    // that stopped answering (asleep, say): Home shows the quit in progress meanwhile.
+    auto restoreHome = [this, restored = std::make_shared<bool>(false)] {
+        if (*restored) {
+            return;
+        }
+        *restored = true;
         setPolling(true);
         if (qApp->applicationState() != Qt::ApplicationActive) {
             m_InactivityTimer.start();
         }
         mv_ui_set_visible(true);
+    };
+    QString appName = app.name;
+    connect(m_Session, &Session::quitStarting, this, [this, restoreHome, appName] {
+        restoreHome();
+        // A new stream can't start until the quit is over, and it can't be cancelled
+        setStatus(QStringLiteral("Fermeture de %1 sur le PC…").arg(appName), true, false, false);
+    });
+    connect(m_Session, &Session::sessionFinished, this, [this, restoreHome](int) {
+        restoreHome();
         setStatus(m_LaunchError, false, !m_LaunchError.isEmpty());
     });
     connect(m_Session, &Session::readyForDeletion, this, [this] {

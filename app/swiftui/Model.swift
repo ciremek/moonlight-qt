@@ -326,6 +326,8 @@ final class MVModel: ObservableObject {
     var openSettings: ((MVSettingsSection?) -> Void)?
     @Published var status = ""
     @Published var busy = false
+    /// The busy work can be cancelled with esc.
+    @Published var cancellable = true
     @Published var errorMessage: String?
     @Published var showPairing = false
     @Published var pairingStep = MVPairingStep.search
@@ -581,6 +583,7 @@ final class MVModel: ObservableObject {
             setPrefs { $0.fps = display.maxFps }
         }
         busy = true
+        cancellable = true
         status = "Connexion à \(computer.name)…"
         rememberRecent(app, on: computer)
         sendAction?([
@@ -691,7 +694,7 @@ final class MVModel: ObservableObject {
     }
 
     func cancelLaunch() {
-        guard busy else { return }
+        guard busy, cancellable else { return }
         sendAction?(["action": "cancel"])
     }
 
