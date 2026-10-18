@@ -11,6 +11,7 @@
 #include <QGuiApplication>
 #include <QJsonArray>
 #include <QJsonDocument>
+#include <QThreadPool>
 #include <QTimer>
 
 #include <type_traits>
@@ -102,12 +103,16 @@ void SwiftUIShell::pushComputers()
             }
 
             appList = computer->appList;
+            bool online = computer->state == NvComputer::CS_ONLINE;
             entry = QJsonObject {
                 { "uuid", computer->uuid },
                 { "name", computer->name },
-                { "online", computer->state == NvComputer::CS_ONLINE },
-                { "paired", computer->pairState == NvComputer::PS_PAIRED },
+                { "online", online },
+                // An offline host's pair state is unknown: the certificate pinned
+                // at pairing tells whether this Mac can stream from it once awake
+                { "paired", online ? computer->pairState == NvComputer::PS_PAIRED : !computer->serverCert.isNull() },
                 { "canWake", !computer->macAddress.isEmpty() },
+                { "mac", QString::fromLatin1(computer->macAddress.toHex(':').toUpper()) },
                 { "runningAppId", computer->currentGameId },
             };
         }
@@ -300,12 +305,7 @@ void SwiftUIShell::dispatch(const QJsonObject& action)
         }
     }
     else if (type == "wake") {
-        NvComputer* computer = findComputer(action["uuid"].toString());
-        if (computer != nullptr) {
-            bool sent = computer->wake();
-            setStatus(sent ? QStringLiteral("Demande de réveil envoyée. Le PC peut mettre une minute à apparaître en ligne.")
-                           : QStringLiteral("Impossible d'envoyer la demande de réveil."), false, !sent);
-        }
+        wake(action);
     }
     else if (type == "quitApp") {
         NvComputer* computer = findComputer(action["uuid"].toString());
@@ -345,6 +345,45 @@ void SwiftUIShell::pair(const QString& computerUuid)
         { "pin", pin },
     }).constData());
     m_ComputerManager->pairHost(computer, pin);
+}
+
+void SwiftUIShell::wake(const QJsonObject& action)
+{
+    QString computerUuid = action["uuid"].toString();
+    NvComputer* computer = findComputer(computerUuid);
+    if (computer == nullptr) {
+        return;
+    }
+
+    // The shell's own wake options: a MAC address typed by the user ("AA:BB:CC:DD:EE:FF",
+    // fromHex() skips the separators) and an extra target outside the local network
+    QByteArray macOverride = QByteArray::fromHex(action["mac"].toString().toLatin1());
+    if (macOverride.size() != 6) {
+        macOverride.clear();
+    }
+    QString extraAddress = action["address"].toString().trimmed();
+    int extraPort = action["port"].toInt();
+    if (extraPort <= 0 || extraPort > 65535) {
+        extraAddress.clear();
+        extraPort = 0;
+    }
+
+    // Resolving host names can block, so the packets go out from a worker thread,
+    // using a copy of the host that a deletion can't pull from under it
+    NvComputer snapshot;
+    {
+        QReadLocker lock(&computer->lock);
+        snapshot = *computer;
+    }
+    QThreadPool::globalInstance()->start([this, snapshot, computerUuid, macOverride, extraAddress, extraPort] {
+        bool sent = snapshot.wake(macOverride, extraAddress, static_cast<quint16>(extraPort));
+        QMetaObject::invokeMethod(this, [computerUuid, sent] {
+            mv_ui_wake_result(toJson(QJsonObject {
+                { "uuid", computerUuid },
+                { "sent", sent },
+            }).constData());
+        }, Qt::QueuedConnection);
+    });
 }
 
 void SwiftUIShell::deleteHost(const QString& computerUuid)

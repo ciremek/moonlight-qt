@@ -61,6 +61,14 @@ struct MVRootView: View {
         .sheet(isPresented: $model.showPairing) {
             MVPairingSheet(model: model)
         }
+        .sheet(isPresented: Binding(
+            get: { model.wakeOptionsComputerId != nil },
+            set: { if !$0 { model.wakeOptionsComputerId = nil } }
+        )) {
+            if let computer = model.computers.first(where: { $0.id == model.wakeOptionsComputerId }) {
+                MVWakeOptionsSheet(model: model, computer: computer)
+            }
+        }
         .alert("Lancement impossible", isPresented: Binding(
             get: { model.errorMessage != nil },
             set: { if !$0 { model.errorMessage = nil } }
@@ -82,7 +90,7 @@ struct MVSidebar: View {
         List(selection: $model.selectedComputerId) {
             Section("Ordinateurs") {
                 ForEach(model.filteredComputers) { computer in
-                    MVComputerRow(computer: computer)
+                    MVComputerRow(computer: computer, waking: model.isWaking(computer))
                         .tag(computer.id)
                 }
                 Button {
@@ -171,23 +179,29 @@ struct MVSearchField: View {
 
 struct MVComputerRow: View {
     let computer: MVComputer
+    let waking: Bool
+
+    private var stateText: String {
+        if computer.online { return computer.paired ? "En ligne" : "Non appairé" }
+        return waking ? "Réveil en cours…" : "Hors ligne"
+    }
 
     var body: some View {
         HStack(spacing: 10) {
             Image(systemName: "desktopcomputer").font(.system(size: 16))
             VStack(alignment: .leading, spacing: 1) {
                 Text(computer.name).font(.system(size: 13, weight: .semibold))
-                Text(computer.online ? (computer.paired ? "En ligne" : "Non appairé") : "Hors ligne")
+                Text(stateText)
                     .font(.system(size: 11))
                     .foregroundStyle(.secondary)
             }
             Spacer()
             Circle()
-                .fill(computer.online ? Color.green : Color.secondary.opacity(0.35))
+                .fill(computer.online ? Color.green : waking ? Color.orange : Color.secondary.opacity(0.35))
                 .frame(width: 8, height: 8)
-                .help(computer.online ? "En ligne" : "Hors ligne")
+                .help(stateText)
                 .accessibilityElement()
-                .accessibilityLabel(computer.online ? "En ligne" : "Hors ligne")
+                .accessibilityLabel(stateText)
         }
         .padding(.vertical, 2)
     }
@@ -308,7 +322,8 @@ struct MVComputerHome: View {
             ToolbarItem(placement: .primaryAction) {
                 Menu {
                     Button("Réveiller") { model.wake(computer) }
-                        .disabled(!computer.canWake || computer.online)
+                        .disabled(!model.canWake(computer) || model.isWaking(computer))
+                    Button("Options de réveil…") { model.wakeOptionsComputerId = computer.id }
                     if let running = computer.runningApp {
                         Button("Quitter \(running.name)…") { model.confirmQuitComputerId = computer.id }
                     }
@@ -346,30 +361,93 @@ struct MVComputerBanner: View {
 
     var body: some View {
         HStack(spacing: 12) {
-            Image(systemName: computer.online ? "lock" : "moon.zzz")
-                .font(.system(size: 18))
-                .foregroundStyle(.secondary)
-            VStack(alignment: .leading, spacing: 2) {
-                Text(computer.online ? "\(computer.name) n'est pas appairé" : "\(computer.name) est hors ligne")
-                    .font(.system(size: 13, weight: .semibold))
-                Text(computer.online
-                     ? "Appaire ce Mac une fois pour pouvoir streamer."
-                     : "Allume le PC ou réveille-le à distance.")
-                    .font(.system(size: 12))
-                    .foregroundStyle(.secondary)
-            }
-            Spacer()
-            if !computer.online && computer.canWake {
-                Button("Réveiller") { model.wake(computer) }
-                    .controlSize(.large)
-            } else if computer.online && !computer.paired {
+            if computer.online {
+                icon("lock")
+                message("\(computer.name) n'est pas appairé", "Appaire ce Mac une fois pour pouvoir streamer.")
+                Spacer(minLength: 8)
                 Button("Appairer") { model.openPairing(for: computer) }
                     .controlSize(.large)
+                    .fixedSize()
+            } else {
+                switch model.wakeStates[computer.id] {
+                case .waking(let since):
+                    ProgressView().controlSize(.small).frame(width: 22)
+                    message("Réveil de \(computer.name)…",
+                            model.appLaunchingAfterWake(on: computer).map { "\($0.name) se lance dès que le PC répond." }
+                                ?? "Moonvibe se connecte dès que le PC répond.")
+                    Spacer(minLength: 8)
+                    TimelineView(.periodic(from: since, by: 1)) { context in
+                        Text(Duration.seconds(context.date.timeIntervalSince(since)).formatted(.time(pattern: .minuteSecond)))
+                            .font(.system(size: 12).monospacedDigit())
+                            .foregroundStyle(.secondary)
+                    }
+                    .accessibilityHidden(true)
+                    Button("Annuler") { model.cancelWake(computer) }
+                        .controlSize(.large)
+                        .fixedSize()
+                case .noAnswer:
+                    icon("exclamationmark.triangle.fill", color: .orange)
+                    message("\(computer.name) ne répond pas",
+                            "Vérifie que le Wake-on-LAN est activé sur le PC (BIOS et carte réseau) et son adresse MAC.")
+                    Spacer(minLength: 8)
+                    Button("Options de réveil…") { model.wakeOptionsComputerId = computer.id }
+                        .controlSize(.large)
+                        .fixedSize()
+                    Button("Réessayer") { model.wake(computer) }
+                        .controlSize(.large)
+                        .fixedSize()
+                case .failed:
+                    icon("exclamationmark.triangle.fill", color: Color(hex: 0xB42318))
+                    message("Réveil impossible", "Moonvibe n'a pu envoyer aucun paquet : vérifie que ce Mac est connecté au réseau.")
+                    Spacer(minLength: 8)
+                    Button("Réessayer") { model.wake(computer) }
+                        .controlSize(.large)
+                        .fixedSize()
+                case nil:
+                    icon("moon.zzz")
+                    if model.canWake(computer) {
+                        message("\(computer.name) est hors ligne",
+                                computer.paired ? "Réveille-le, ou lance directement une app : Moonvibe le réveille d'abord."
+                                                : "Allume le PC ou réveille-le à distance.")
+                        Spacer(minLength: 8)
+                        Button("Réveiller") { model.wake(computer) }
+                            .controlSize(.large)
+                            .fixedSize()
+                    } else {
+                        message("\(computer.name) est hors ligne",
+                                "Allume le PC. Pour le réveiller à distance, renseigne son adresse MAC.")
+                        Spacer(minLength: 8)
+                        Button("Options de réveil…") { model.wakeOptionsComputerId = computer.id }
+                            .controlSize(.large)
+                            .fixedSize()
+                    }
+                }
             }
         }
         .padding(.horizontal, 24)
         .padding(.vertical, 12)
         .background(.quaternary.opacity(0.4))
+    }
+
+    private func icon(_ name: String, color: Color = .secondary) -> some View {
+        Image(systemName: name)
+            .font(.system(size: 18))
+            .foregroundStyle(color)
+            .frame(width: 22)
+            .accessibilityHidden(true)
+    }
+
+    // Two lines at most and first claim on the width, like the running banner
+    private func message(_ title: String, _ detail: String) -> some View {
+        VStack(alignment: .leading, spacing: 2) {
+            Text(title).font(.system(size: 13, weight: .semibold))
+            Text(detail)
+                .font(.system(size: 12))
+                .foregroundStyle(.secondary)
+                .lineLimit(2)
+        }
+        .layoutPriority(1)
+        .accessibilityElement(children: .combine)
     }
 }
 
@@ -522,14 +600,9 @@ struct MVLaunchBar: View {
     var body: some View {
         HStack(spacing: 14) {
             if let app {
-                let resuming = app.id == computer.runningAppId
-                MVPrimaryButton(title: "\(resuming ? "Reprendre" : "Lancer") \(app.name)",
-                                busy: model.busy,
-                                disabled: !model.canLaunch(on: computer)) {
-                    model.requestLaunch(app, on: computer)
-                }
-                .fixedSize()
-                .help("Pendant le stream : ⌃⌥⇧Q pour quitter, ⌃⌥⇧S pour les stats, ⌃⌥⇧Z pour libérer la souris")
+                primaryButton(for: app)
+                    .fixedSize()
+                    .help("Pendant le stream : ⌃⌥⇧Q pour quitter, ⌃⌥⇧S pour les stats, ⌃⌥⇧Z pour libérer la souris")
             }
 
             Text(model.busy ? "\(model.status)  ·  esc pour annuler" : model.status)
@@ -543,10 +616,32 @@ struct MVLaunchBar: View {
         .padding(.vertical, 14)
         .overlay(alignment: .top) { Divider() }
     }
+
+    @ViewBuilder
+    private func primaryButton(for app: MVApp) -> some View {
+        if !computer.online, model.canWake(computer), computer.paired {
+            // Picking another app while the PC wakes up switches the app it launches
+            let waitingForWake = model.appLaunchingAfterWake(on: computer)?.id == app.id
+            MVPrimaryButton(title: "Réveiller et lancer \(app.name)",
+                            systemImage: "power",
+                            busy: waitingForWake || model.busy,
+                            disabled: waitingForWake || !model.canWakeAndLaunch(on: computer)) {
+                model.requestLaunch(app, on: computer)
+            }
+        } else {
+            let resuming = app.id == computer.runningAppId
+            MVPrimaryButton(title: "\(resuming ? "Reprendre" : "Lancer") \(app.name)",
+                            busy: model.busy,
+                            disabled: !model.canLaunch(on: computer)) {
+                model.requestLaunch(app, on: computer)
+            }
+        }
+    }
 }
 
 struct MVPrimaryButton: View {
     let title: String
+    var systemImage = "play.fill"
     let busy: Bool
     let disabled: Bool
     let action: () -> Void
@@ -556,7 +651,7 @@ struct MVPrimaryButton: View {
             if busy {
                 ProgressView().controlSize(.small)
             } else {
-                Image(systemName: "play.fill")
+                Image(systemName: systemImage)
             }
             Text(title).fontWeight(.semibold)
             Text("↩").font(.system(size: 11, weight: .medium)).opacity(0.7)

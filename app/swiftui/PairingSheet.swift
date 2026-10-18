@@ -28,7 +28,7 @@ struct MVPairingSheet: View {
     }
 }
 
-private struct MVSheetHeader: View {
+struct MVSheetHeader: View {
     let title: String
     let subtitle: String
 

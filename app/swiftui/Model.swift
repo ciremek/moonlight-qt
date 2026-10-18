@@ -31,8 +31,12 @@ struct MVComputer: Decodable, Identifiable, Hashable {
     let uuid: String
     let name: String
     let online: Bool
+    /// For an offline PC: paired the last time it was seen.
     let paired: Bool
+    /// The PC reported a MAC address for Wake-on-LAN.
     let canWake: Bool
+    /// "AA:BB:CC:DD:EE:FF" as reported by the PC, or empty.
+    let mac: String
     let runningAppId: Int
     let apps: [MVApp]
 
@@ -252,6 +256,41 @@ struct MVAppRef: Equatable {
     let appId: Int
 }
 
+// MARK: - Wake-on-LAN
+
+/// Moonvibe's own wake settings for a PC, on top of what the PC reports.
+struct MVWakeOptions: Codable, Equatable {
+    /// Replaces the MAC address reported by the PC. Empty: use the reported one.
+    var mac = ""
+    /// One more target, for waking the PC from outside its network: an IP address or a
+    /// DDNS name, and the UDP port the router forwards to the PC. Empty: none.
+    var address = ""
+    var port = 9
+
+    var isEmpty: Bool { self == MVWakeOptions() }
+
+    /// "AA:BB:CC:DD:EE:FF", from the usual ways of writing a MAC address, or nil.
+    static func normalizedMac(_ text: String) -> String? {
+        let digits = Array(text.uppercased().filter { !":-. ".contains($0) })
+        guard digits.count == 12, digits.allSatisfy(\.isHexDigit) else { return nil }
+        return stride(from: 0, to: 12, by: 2).map { String(digits[$0...$0 + 1]) }.joined(separator: ":")
+    }
+}
+
+enum MVWakeState: Equatable {
+    /// Magic packets go out until the PC answers.
+    case waking(since: Date)
+    /// The PC didn't answer within `MVModel.wakeTimeout`.
+    case noAnswer
+    /// No packet could be sent.
+    case failed
+}
+
+struct MVWakeResult: Decodable {
+    let uuid: String
+    let sent: Bool
+}
+
 // MARK: - Recent sessions
 
 struct MVRecent: Codable, Identifiable, Hashable {
@@ -301,15 +340,36 @@ final class MVModel: ObservableObject {
     private var launchAfterQuit: MVAppRef?
     private var openedPairingForEmptyList = false
 
+    /// Wake settings by computer id.
+    @Published private(set) var wakeOptions: [String: MVWakeOptions] = [:]
+    /// PCs being woken, or that didn't wake, by computer id.
+    @Published private(set) var wakeStates: [String: MVWakeState] = [:]
+    /// Computer whose wake options sheet is open.
+    @Published var wakeOptionsComputerId: String?
+    /// App to launch once a waking PC answers, by computer id.
+    private var launchAfterWake: [String: Int] = [:]
+    private var wakeTasks: [String: Task<Void, Never>] = [:]
+
+    /// A PC booting from off takes about a minute to start Sunshine; a slow one may need two.
+    static let wakeTimeout: Duration = .seconds(120)
+    /// Wi-Fi sends broadcast frames once, without acknowledgment, so a magic packet can get
+    /// lost: it goes out again at this interval until the PC answers.
+    static let wakeResendInterval: Duration = .seconds(10)
+
     var sendAction: (([String: Any]) -> Void)?
     weak var window: NSWindow?
 
     private static let recentsKey = "MoonvibeRecents"
+    private static let wakeOptionsKey = "MoonvibeWakeOptions"
 
     init() {
         if let data = UserDefaults.standard.data(forKey: Self.recentsKey),
            let decoded = try? JSONDecoder().decode([MVRecent].self, from: data) {
             recents = decoded
+        }
+        if let data = UserDefaults.standard.data(forKey: Self.wakeOptionsKey),
+           let decoded = try? JSONDecoder().decode([String: MVWakeOptions].self, from: data) {
+            wakeOptions = decoded
         }
     }
 
@@ -386,6 +446,31 @@ final class MVModel: ObservableObject {
         computer.online && computer.paired && !busy
     }
 
+    /// The MAC address the magic packet targets: the user's, else the one the PC reported.
+    func wakeMac(of computer: MVComputer) -> String? {
+        MVWakeOptions.normalizedMac(wakeOptions[computer.id]?.mac ?? "") ?? (computer.canWake ? computer.mac : nil)
+    }
+
+    func canWake(_ computer: MVComputer) -> Bool {
+        !computer.online && wakeMac(of: computer) != nil
+    }
+
+    /// An offline PC this Mac paired with: launching one of its apps wakes it first.
+    func canWakeAndLaunch(on computer: MVComputer) -> Bool {
+        canWake(computer) && computer.paired && !busy
+    }
+
+    func isWaking(_ computer: MVComputer) -> Bool {
+        if case .waking = wakeStates[computer.id] { return true }
+        return false
+    }
+
+    /// The app that launches once the waking PC answers.
+    func appLaunchingAfterWake(on computer: MVComputer) -> MVApp? {
+        guard let appId = launchAfterWake[computer.id] else { return nil }
+        return computer.apps.first { $0.id == appId }
+    }
+
     // MARK: Updates from the host
 
     func update(computers: [MVComputer]) {
@@ -397,6 +482,18 @@ final class MVModel: ObservableObject {
            let app = computer.apps.first(where: { $0.id == pending.appId }) {
             launchAfterQuit = nil
             launch(app, on: computer)
+        }
+
+        // A PC woke up (or was deleted): stop sending packets, then launch the app waiting for it
+        for (computerId, state) in wakeStates {
+            let computer = computers.first { $0.id == computerId }
+            guard computer?.online ?? true else { continue }
+            let appId = launchAfterWake[computerId]
+            stopWaking(computerId)
+            if case .waking = state, let computer, let appId,
+               let app = computer.apps.first(where: { $0.id == appId }) {
+                requestLaunch(app, on: computer)
+            }
         }
 
         // No PC yet: start with pairing, once
@@ -506,6 +603,14 @@ final class MVModel: ObservableObject {
     /// Launches an app, or first asks to quit the other app running on the PC: the host
     /// refuses to start a second one.
     func requestLaunch(_ app: MVApp, on computer: MVComputer) {
+        // Wake & Go: wake the PC, and launch the app as soon as it answers
+        if !computer.online {
+            if canWakeAndLaunch(on: computer) {
+                selectedAppId = app.id
+                wake(computer, thenLaunch: app)
+            }
+            return
+        }
         if computer.runningAppId != 0, computer.runningAppId != app.id {
             selectedComputerId = computer.id
             selectedAppId = app.id
@@ -580,6 +685,8 @@ final class MVModel: ObservableObject {
         if let data = try? JSONEncoder().encode(recents) {
             UserDefaults.standard.set(data, forKey: Self.recentsKey)
         }
+        stopWaking(computer.id)
+        setWakeOptions(MVWakeOptions(), for: computer)
         sendAction?(["action": "deleteHost", "uuid": computer.uuid])
     }
 
@@ -588,8 +695,72 @@ final class MVModel: ObservableObject {
         sendAction?(["action": "cancel"])
     }
 
-    func wake(_ computer: MVComputer) {
-        sendAction?(["action": "wake", "uuid": computer.uuid])
+    // MARK: Wake-on-LAN
+
+    /// Sends magic packets until the PC answers or `wakeTimeout` runs out, then optionally
+    /// launches an app on it. Waking a PC already waking only changes the app.
+    func wake(_ computer: MVComputer, thenLaunch app: MVApp? = nil) {
+        guard canWake(computer) else { return }
+        launchAfterWake[computer.id] = app?.id
+        guard !isWaking(computer) else { return }
+
+        let computerId = computer.id
+        wakeStates[computerId] = .waking(since: Date())
+        wakeTasks[computerId] = Task { [weak self] in
+            let clock = ContinuousClock()
+            let deadline = clock.now + Self.wakeTimeout
+            while clock.now < deadline {
+                guard let self, !Task.isCancelled else { return }
+                self.sendWakePacket(to: computerId)
+                try? await Task.sleep(for: Self.wakeResendInterval)
+            }
+            guard let self, !Task.isCancelled else { return }
+            self.stopWaking(computerId)
+            self.wakeStates[computerId] = .noAnswer
+        }
+    }
+
+    func cancelWake(_ computer: MVComputer) {
+        stopWaking(computer.id)
+    }
+
+    private func stopWaking(_ computerId: String) {
+        wakeTasks.removeValue(forKey: computerId)?.cancel()
+        wakeStates[computerId] = nil
+        launchAfterWake[computerId] = nil
+    }
+
+    private func sendWakePacket(to computerId: String) {
+        var action: [String: Any] = ["action": "wake", "uuid": computerId]
+        let options = wakeOptions[computerId] ?? MVWakeOptions()
+        if let mac = MVWakeOptions.normalizedMac(options.mac) {
+            action["mac"] = mac
+        }
+        if !options.address.isEmpty {
+            action["address"] = options.address
+            action["port"] = options.port
+        }
+        sendAction?(action)
+    }
+
+    func update(wakeResult: MVWakeResult) {
+        guard !wakeResult.sent, case .waking = wakeStates[wakeResult.uuid] else { return }
+        stopWaking(wakeResult.uuid)
+        wakeStates[wakeResult.uuid] = .failed
+    }
+
+    /// Saves wake options, dropping a MAC override equal to the reported address.
+    func setWakeOptions(_ options: MVWakeOptions, for computer: MVComputer) {
+        var options = options
+        options.mac = MVWakeOptions.normalizedMac(options.mac) ?? ""
+        if options.mac == computer.mac { options.mac = "" }
+        options.address = options.address.trimmingCharacters(in: .whitespaces)
+        if options.address.isEmpty { options.port = MVWakeOptions().port }
+
+        wakeOptions[computer.id] = options.isEmpty ? nil : options
+        if let data = try? JSONEncoder().encode(wakeOptions) {
+            UserDefaults.standard.set(data, forKey: Self.wakeOptionsKey)
+        }
     }
 
     func quitRunningApp(on computer: MVComputer) {

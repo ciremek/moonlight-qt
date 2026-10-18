@@ -38,6 +38,7 @@ private:
     void dispatch(const QJsonObject& action);
     void launch(const QString& computerUuid, int appId, const QPoint& displayOrigin);
     void pair(const QString& computerUuid);
+    void wake(const QJsonObject& action);
     void deleteHost(const QString& computerUuid);
     void applyPrefs(const QJsonObject& prefs);
     void pushPrefs();

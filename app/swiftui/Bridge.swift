@@ -123,6 +123,14 @@ public func mvUiAddHostResult(_ json: UnsafePointer<CChar>) {
     }
 }
 
+@_cdecl("mv_ui_wake_result")
+public func mvUiWakeResult(_ json: UnsafePointer<CChar>) {
+    guard let result = decode(MVWakeResult.self, from: json) else { return }
+    MainActor.assumeIsolated {
+        MVWindowController.shared?.model.update(wakeResult: result)
+    }
+}
+
 @_cdecl("mv_ui_set_visible")
 public func mvUiSetVisible(_ visible: Bool) {
     MainActor.assumeIsolated {

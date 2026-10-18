@@ -213,7 +213,7 @@ NvComputer::NvComputer(NvHTTP& http, QString serverInfo)
     this->isSupportedServerVersion = CompatFetcher::isGfeVersionSupported(this->gfeVersion);
 }
 
-bool NvComputer::wake() const
+bool NvComputer::wake(const QByteArray& macOverride, const QString& extraAddress, quint16 extraPort) const
 {
     QByteArray wolPayload;
 
@@ -225,7 +225,8 @@ bool NvComputer::wake() const
             return true;
         }
 
-        if (macAddress.isEmpty()) {
+        const QByteArray& targetMac = macOverride.isEmpty() ? macAddress : macOverride;
+        if (targetMac.isEmpty()) {
             qWarning() << name << "has no MAC address stored";
             return false;
         }
@@ -233,7 +234,7 @@ bool NvComputer::wake() const
         // Create the WoL payload
         wolPayload.append(QByteArray::fromHex("FFFFFFFFFFFF"));
         for (int i = 0; i < 16; i++) {
-            wolPayload.append(macAddress);
+            wolPayload.append(targetMac);
         }
         Q_ASSERT(wolPayload.size() == 102);
     }
@@ -348,6 +349,34 @@ bool NvComputer::wake() const
                         qWarning() << "Send failed:" << sock.error();
                     }
                 }
+            }
+        }
+    }
+
+    // The extra target only gets its own port: the router forwards that one alone
+    if (!extraAddress.isEmpty() && extraPort != 0) {
+        QHostAddress literalAddress;
+        QList<QHostAddress> addressList;
+
+        if (literalAddress.setAddress(extraAddress)) {
+            addressList.append(literalAddress);
+        }
+        else {
+            QHostInfo hostInfo = QHostInfo::fromName(extraAddress);
+            if (hostInfo.error() != QHostInfo::NoError) {
+                qWarning() << "Error resolving" << extraAddress << ":" << hostInfo.errorString();
+            }
+            addressList.append(hostInfo.addresses());
+        }
+
+        for (const QHostAddress& address : addressList) {
+            QUdpSocket sock;
+            if (sock.writeDatagram(wolPayload, address, extraPort)) {
+                qInfo().nospace().noquote() << "Sent WoL packet to " << name << " via " << address.toString() << ":" << extraPort;
+                success = true;
+            }
+            else {
+                qWarning() << "Send failed:" << sock.error();
             }
         }
     }

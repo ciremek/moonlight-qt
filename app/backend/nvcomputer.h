@@ -50,8 +50,11 @@ public:
     bool
     update(const NvComputer& that);
 
+    // macOverride replaces the MAC address reported by the host, and extraAddress:extraPort
+    // is one more target, such as a DDNS name whose port the router forwards to the host
     bool
-    wake() const;
+    wake(const QByteArray& macOverride = QByteArray(),
+         const QString& extraAddress = QString(), quint16 extraPort = 0) const;
 
     enum ReachabilityType
     {
