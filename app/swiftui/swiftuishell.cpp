@@ -526,7 +526,7 @@ void SwiftUIShell::launch(const QString& computerUuid, int appId, const QPoint& 
     connect(m_Session, &Session::quitStarting, this, [this, restoreHome, appName] {
         restoreHome();
         // A new stream can't start until the quit is over, and it can't be cancelled
-        setStatus(QStringLiteral("Fermeture de %1 sur le PC…").arg(appName), true, false, false);
+        setStatus(QStringLiteral("%1 se ferme sur le PC…").arg(appName), true, false, false);
     });
     connect(m_Session, &Session::sessionFinished, this, [this, restoreHome](int) {
         restoreHome();

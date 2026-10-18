@@ -29,20 +29,21 @@ struct MVWakeOptionsSheet: View {
 
     private var macHelp: String {
         computer.mac.isEmpty
-            ? "Le PC ne l'a pas encore communiquée. Sur le PC : ipconfig /all, ligne « Adresse physique » de la carte réseau branchée."
-            : "Détectée sur le PC : \(computer.mac). Change-la seulement s'il se réveille par une autre carte réseau. Vide, Moonvibe reprend celle-ci."
+            ? "Sur le PC : ipconfig /all, ligne « Adresse physique »."
+            : "Détectée sur le PC : \(computer.mac)."
     }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 18) {
-            MVSheetHeader(title: "Réveil de \(computer.name)",
-                          subtitle: "Moonvibe envoie un paquet Wake-on-LAN pour allumer le PC. Il doit l'accepter : option à activer dans son BIOS et sur sa carte réseau.")
+            MVSheetHeader(title: "Réveil \(mvOf(computer.name))",
+                          subtitle: "Le Wake-on-LAN doit être activé dans le BIOS du PC.")
 
             VStack(alignment: .leading, spacing: 8) {
                 sectionTitle("Adresse MAC")
                 TextField("AA:BB:CC:DD:EE:FF", text: $mac)
                     .textFieldStyle(.roundedBorder)
                     .font(.system(size: 13).monospaced())
+                    .accessibilityLabel("Adresse MAC")
                 if macValid {
                     caption(macHelp)
                 } else {
@@ -55,14 +56,17 @@ struct MVWakeOptionsSheet: View {
                 HStack(spacing: 6) {
                     TextField("IP ou nom DDNS, ex. monpc.freeboxos.fr", text: $address)
                         .textFieldStyle(.roundedBorder)
+                        .accessibilityLabel("Adresse hors de chez toi")
                     Text("port").font(.system(size: 12)).foregroundStyle(.secondary)
+                        .accessibilityHidden(true)
                     TextField("9", text: $port)
                         .textFieldStyle(.roundedBorder)
                         .frame(width: 64)
                         .disabled(trimmedAddress.isEmpty)
+                        .accessibilityLabel("Port")
                 }
                 if portValid {
-                    caption("Facultatif. Ta box doit rediriger ce port UDP vers le PC, ou faire proxy Wake-on-LAN.")
+                    caption("Facultatif. Ta box doit rediriger ce port UDP vers le PC.")
                 } else {
                     error("Le port va de 1 à 65535.")
                 }
@@ -103,7 +107,7 @@ struct MVWakeOptionsSheet: View {
     private func error(_ text: String) -> some View {
         Text(text)
             .font(.system(size: 12))
-            .foregroundStyle(Color(hex: 0xB42318))
+            .foregroundStyle(mvDanger)
             .fixedSize(horizontal: false, vertical: true)
     }
 }

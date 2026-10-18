@@ -9,15 +9,6 @@ struct MVApp: Decodable, Identifiable, Hashable {
     let id: Int
     let name: String
 
-    /// Short description under well-known Sunshine/Apollo apps.
-    var subtitle: String? {
-        let lower = name.lowercased()
-        if lower.contains("virtual") || lower.contains("virtuel") { return "Écran dédié au stream" }
-        if lower.contains("desktop") || lower.contains("bureau") { return "Tout l'écran du PC" }
-        if lower.contains("big picture") || lower == "steam" { return "Big Picture" }
-        return nil
-    }
-
     var symbolName: String {
         let lower = name.lowercased()
         if lower.contains("virtual") || lower.contains("virtuel") { return "plus.rectangle.on.rectangle" }
@@ -137,9 +128,9 @@ enum MVPreset: String, CaseIterable, Identifiable {
     var help: String {
         switch self {
         case .fluid: return "Latence minimale, idéal en Wi-Fi."
-        case .balanced: return "Le bon compromis pour ton écran."
-        case .max: return "Natif, net comme jamais. Câble ou Wi-Fi 6 conseillé."
-        case .custom: return "Tes réglages à toi, enregistrés dès que tu les modifies."
+        case .balanced: return "Le compromis entre netteté et fluidité."
+        case .max: return "Résolution native. Câble ou Wi-Fi 6 conseillé."
+        case .custom: return "Tes réglages, enregistrés dès que tu les modifies."
         }
     }
 
@@ -628,7 +619,7 @@ final class MVModel: ObservableObject {
         confirmSwitch = nil
         launchAfterQuit = MVAppRef(computerId: computer.id, appId: app.id)
         quitRunningApp(on: computer)
-        status = "Fermeture de \(computer.runningApp?.name ?? "l'app en cours"), puis lancement de \(app.name)…"
+        status = "\(computer.runningApp?.name ?? "L'app en cours") se ferme, puis \(app.name) se lance…"
     }
 
     /// The host failed to quit the app: drop the launch waiting for it.

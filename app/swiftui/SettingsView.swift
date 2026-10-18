@@ -36,7 +36,7 @@ enum MVSettingsSection: String, CaseIterable, Identifiable {
         case .image: return mvAccent
         case .audio: return Color(hex: 0xD6336C)
         case .input: return Color(hex: 0x6A6A72)
-        case .gamepad: return Color(hex: 0x28B44B)
+        case .gamepad: return Color(hex: 0x1F8A3B)
         case .network: return Color(hex: 0x2F7DD8)
         case .advanced: return Color(hex: 0x55555C)
         }
@@ -47,7 +47,7 @@ enum MVSettingsSection: String, CaseIterable, Identifiable {
         switch self {
         case .image:
             return ["Préréglage", "Résolution", "Images par seconde", "Débit vidéo", "Mode d'affichage",
-                    "Synchronisation verticale (V-Sync)", "Frame pacing", "HDR"]
+                    "Synchronisation verticale (V-Sync)", "HDR"]
         case .audio:
             return ["Configuration audio", "Couper le son du PC", "Couper le son en arrière-plan"]
         case .input:
@@ -57,10 +57,10 @@ enum MVSettingsSection: String, CaseIterable, Identifiable {
             return ["Plusieurs manettes", "Manettes en arrière-plan", "Souris à la manette", "Inverser A/B et X/Y"]
         case .network:
             return ["Trouver les PC automatiquement", "Détecter les blocages réseau", "Couper l'AWDL",
-                    "Quitter l'app à la fin du stream", "Optimiser les réglages des jeux"]
+                    "Quitter l'app à la fin du stream"]
         case .advanced:
             return ["Codec vidéo", "YUV 4:4:4", "Décodeur vidéo", "Moteur de rendu", "Débloquer le débit",
-                    "Garder l'écran allumé", "Afficher les stats au démarrage", "Avertissements de connexion",
+                    "Optimiser les réglages des jeux", "Garder l'écran allumé", "Afficher les stats au démarrage", "Avertissements de connexion",
                     "Avertissements de configuration", "Statut Discord"]
         }
     }
@@ -234,22 +234,16 @@ extension MVModel {
     }
 }
 
-/// A switch with a title and an optional line of help under it.
+/// A switch with a title, and its explanation in the tooltip.
 struct MVSettingToggle: View {
     let title: String
     var help: String?
     @Binding var isOn: Bool
 
     var body: some View {
-        Toggle(isOn: $isOn) {
-            VStack(alignment: .leading, spacing: 2) {
-                Text(title)
-                if let help {
-                    Text(help).font(.system(size: 11)).foregroundStyle(.secondary)
-                }
-            }
-        }
-        .toggleStyle(.switch)
+        Toggle(title, isOn: $isOn)
+            .toggleStyle(.switch)
+            .help(help ?? "")
     }
 }
 
@@ -383,10 +377,9 @@ struct MVImageSettings: View {
                 }
                 .pickerStyle(.segmented)
                 .labelsHidden()
+                .help(model.preset.help)
             } header: {
                 Text("Préréglage")
-            } footer: {
-                Text("\(model.preset.label) : \(model.preset.help)")
             }
 
             Section("Résolution et fluidité") {
@@ -397,10 +390,8 @@ struct MVImageSettings: View {
                 VStack(alignment: .leading, spacing: 6) {
                     Text("Débit vidéo")
                     MVBitrateSlider(model: model)
-                    Text("Baisse-le si l'image saccade, monte-le pour une image plus nette.")
-                        .font(.system(size: 11))
-                        .foregroundStyle(.secondary)
                 }
+                .help("Plus haut, l'image est plus nette. Plus bas, elle saccade moins sur un réseau chargé.")
             }
 
             Section("Affichage") {
@@ -410,11 +401,6 @@ struct MVImageSettings: View {
                 MVSettingToggle(title: "Synchronisation verticale (V-Sync)",
                                 help: "Supprime les déchirures d'image, au prix d'un peu de latence.",
                                 isOn: model.binding(\.vsync))
-                MVSettingToggle(title: "Frame pacing",
-                                help: model.prefs.vsync ? "Lisse l'affichage quand les images arrivent irrégulièrement."
-                                                        : "Nécessite la V-Sync.",
-                                isOn: model.binding(\.framePacing))
-                    .disabled(!model.prefs.vsync)
                 MVSettingToggle(title: "HDR",
                                 help: "Nécessite un écran HDR et un codec HEVC ou AV1.",
                                 isOn: model.binding(\.hdr))
@@ -429,20 +415,14 @@ struct MVAudioSettings: View {
 
     var body: some View {
         Form {
-            Section("Sortie") {
+            Section {
                 Picker("Configuration audio", selection: model.binding(\.audioConfig)) {
                     Text("Stéréo").tag(0)
                     Text("Surround 5.1").tag(1)
                     Text("Surround 7.1").tag(2)
                 }
-            }
-            Section("Son") {
-                MVSettingToggle(title: "Couper le son du PC",
-                                help: "Le son ne sort que sur ce Mac pendant le stream.",
-                                isOn: model.binding(\.muteHost))
-                MVSettingToggle(title: "Couper le son en arrière-plan",
-                                help: "Coupe le son du stream quand Moonvibe n'est plus au premier plan.",
-                                isOn: model.binding(\.muteOnFocusLoss))
+                MVSettingToggle(title: "Couper le son du PC", isOn: model.binding(\.muteHost))
+                MVSettingToggle(title: "Couper le son en arrière-plan", isOn: model.binding(\.muteOnFocusLoss))
             }
         }
         .formStyle(.grouped)
@@ -456,21 +436,18 @@ struct MVInputSettings: View {
         Form {
             Section("Souris") {
                 MVSettingToggle(title: "Souris pour bureau à distance",
-                                help: "Le curseur suit exactement ta souris. Pratique hors jeux, à éviter dans les jeux de tir.",
+                                help: "Le curseur suit exactement ta souris. À éviter dans les jeux de tir.",
                                 isOn: model.binding(\.absoluteMouse))
                 MVSettingToggle(title: "Inverser les clics gauche et droit", isOn: model.binding(\.swapMouseButtons))
                 MVSettingToggle(title: "Inverser le défilement", isOn: model.binding(\.reverseScroll))
             }
-            Section {
+            Section("Clavier") {
                 Picker("Capturer les raccourcis système", selection: model.binding(\.captureSysKeys)) {
                     Text("Jamais").tag(0)
                     Text("En plein écran").tag(1)
                     Text("Toujours").tag(2)
                 }
-            } header: {
-                Text("Clavier")
-            } footer: {
-                Text("Envoie au PC les raccourcis comme ⌘⇥ ou ⌘Espace au lieu de les laisser à macOS.")
+                .help("Envoie au PC les raccourcis comme ⌘⇥ ou ⌘Espace au lieu de les laisser à macOS.")
             }
         }
         .formStyle(.grouped)
@@ -486,9 +463,7 @@ struct MVGamepadSettings: View {
                 MVSettingToggle(title: "Plusieurs manettes",
                                 help: "Chaque manette est un joueur. Coupé, elles pilotent toutes le joueur 1.",
                                 isOn: model.binding(\.multiController))
-                MVSettingToggle(title: "Manettes en arrière-plan",
-                                help: "Les manettes restent actives quand Moonvibe n'est pas au premier plan.",
-                                isOn: model.binding(\.backgroundGamepad))
+                MVSettingToggle(title: "Manettes en arrière-plan", isOn: model.binding(\.backgroundGamepad))
                 MVSettingToggle(title: "Souris à la manette",
                                 help: "Maintiens Start pour piloter la souris du PC avec la manette.",
                                 isOn: model.binding(\.gamepadMouse))
@@ -507,15 +482,8 @@ struct MVNetworkSettings: View {
     var body: some View {
         Form {
             Section("Ordinateurs") {
-                MVSettingToggle(title: "Trouver les PC automatiquement",
-                                help: "Cherche les PC sur ton réseau local (mDNS).",
-                                isOn: model.binding(\.mdns))
-                MVSettingToggle(title: "Quitter l'app à la fin du stream",
-                                help: "Ferme l'app sur le PC quand tu quittes le stream.",
-                                isOn: model.binding(\.quitAppAfter))
-                MVSettingToggle(title: "Optimiser les réglages des jeux",
-                                help: "Laisse GeForce Experience adapter les réglages des jeux au stream.",
-                                isOn: model.binding(\.gameOptimizations))
+                MVSettingToggle(title: "Trouver les PC automatiquement", isOn: model.binding(\.mdns))
+                MVSettingToggle(title: "Quitter l'app à la fin du stream", isOn: model.binding(\.quitAppAfter))
             }
             Section("Réseau") {
                 MVSettingToggle(title: "Couper l'AWDL",
@@ -560,16 +528,25 @@ struct MVAdvancedSettings: View {
                     Text("Metal").tag(2)
                     Text("AVSampleBufferDisplayLayer").tag(3)
                 }
+                // Only this renderer paces frames on macOS: Vulkan and Metal ignore the option
+                if model.prefs.renderer == 3 {
+                    MVSettingToggle(title: "Frame pacing",
+                                    help: model.prefs.vsync ? "Lisse l'affichage quand les images arrivent irrégulièrement."
+                                                            : "Nécessite la V-Sync.",
+                                    isOn: model.binding(\.framePacing))
+                        .disabled(!model.prefs.vsync)
+                }
                 MVSettingToggle(title: "Débloquer le débit",
                                 help: "Monte le débit jusqu'à 500 Mb/s au lieu de 150.",
                                 isOn: model.binding(\.unlockBitrate))
+                MVSettingToggle(title: "Optimiser les réglages des jeux",
+                                help: "Pour GeForce Experience uniquement.",
+                                isOn: model.binding(\.gameOptimizations))
             }
             Section("Pendant le stream") {
                 MVSettingToggle(title: "Garder l'écran allumé", isOn: model.binding(\.keepAwake))
                 MVSettingToggle(title: "Afficher les stats au démarrage", isOn: model.binding(\.showStats))
-                MVSettingToggle(title: "Avertissements de connexion",
-                                help: "Signale une connexion instable pendant le stream.",
-                                isOn: model.binding(\.connectionWarnings))
+                MVSettingToggle(title: "Avertissements de connexion", isOn: model.binding(\.connectionWarnings))
                 MVSettingToggle(title: "Avertissements de configuration",
                                 help: "Signale les réglages que ce Mac ou le PC ne gèrent pas.",
                                 isOn: model.binding(\.configurationWarnings))

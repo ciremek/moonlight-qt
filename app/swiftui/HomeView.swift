@@ -30,6 +30,24 @@ private extension NSColor {
 /// One neutral tile color: indigo is kept for the selection so it stands out.
 private let tileFill = Color(light: NSColor(hex: 0xEEF0F4), dark: NSColor(hex: 0x2B2D34))
 
+/// The accent as text, icons and outlines. mvAccent stays the fill under white text,
+/// but lacks contrast against dark backgrounds, hence a lighter shade there.
+let mvAccentForeground = Color(light: NSColor(hex: 0x4F5BD5), dark: NSColor(hex: 0x8C96F2))
+/// Destructive actions and errors as text and icons, readable in both appearances.
+let mvDanger = Color(light: NSColor(hex: 0xB42318), dark: NSColor(hex: 0xFF7B72))
+/// Destructive buttons, a fill under white text.
+let mvDangerFill = Color(hex: 0xB42318)
+/// Online and running dots, always next to a text that says the same.
+let mvOnline = Color(hex: 0x28B44B)
+/// The running badge, a fill under white text.
+let mvRunningFill = Color(hex: 0x1E7E36)
+
+/// "de" before a name, elided before a vowel: "d'AZATOTH", "de Steam".
+func mvOf(_ name: String) -> String {
+    let first = name.folding(options: [.diacriticInsensitive, .caseInsensitive], locale: nil).first
+    return first.map { "aeiou".contains($0) } == true ? "d'\(name)" : "de \(name)"
+}
+
 // MARK: - Root
 
 struct MVRootView: View {
@@ -142,7 +160,6 @@ struct MVSidebar: View {
                 }
                 .buttonStyle(.plain)
                 Spacer()
-                MVKeycap("⌘,")
             }
             .font(.system(size: 13))
             .padding(.horizontal, 16)
@@ -197,11 +214,9 @@ struct MVComputerRow: View {
             }
             Spacer()
             Circle()
-                .fill(computer.online ? Color.green : waking ? Color.orange : Color.secondary.opacity(0.35))
+                .fill(computer.online ? mvOnline : waking ? Color.orange : Color.secondary.opacity(0.35))
                 .frame(width: 8, height: 8)
-                .help(stateText)
-                .accessibilityElement()
-                .accessibilityLabel(stateText)
+                .accessibilityHidden(true)
         }
         .padding(.vertical, 2)
     }
@@ -248,7 +263,9 @@ struct MVDetail: View {
                 ContentUnavailableView {
                     Label("Aucun ordinateur", systemImage: "desktopcomputer")
                 } description: {
-                    Text("Moonvibe cherche les PC qui font tourner Sunshine ou Apollo sur ton réseau.")
+                    Text("Les PC de ton réseau qui font tourner Sunshine ou Apollo apparaissent ici.")
+                } actions: {
+                    Button("Ajouter un ordinateur…") { model.openPairing() }
                 }
             }
         }
@@ -292,6 +309,9 @@ struct MVComputerHome: View {
                                         model.selectedAppId = app.id
                                         gridFocused = true
                                     })
+                                    .accessibilityAddTraits(.isButton)
+                                    .accessibilityAction { model.requestLaunch(app, on: computer) }
+                                    .accessibilityHint(computer.online ? "Lance l'app" : "Réveille le PC, puis lance l'app")
                             }
                         }
                     }
@@ -333,6 +353,7 @@ struct MVComputerHome: View {
                     Image(systemName: "ellipsis")
                 }
                 .help("Plus d'actions")
+                .accessibilityLabel("Plus d'actions")
             }
         }
         .background {
@@ -350,7 +371,7 @@ struct MVComputerHome: View {
         .confirmationDialog("Supprimer \(computer.name) de Moonvibe ?", isPresented: $confirmDelete) {
             Button("Supprimer", role: .destructive) { model.delete(computer) }
         } message: {
-            Text("Il faudra l'appairer à nouveau pour streamer. L'app Moonlight officielle n'est pas concernée.")
+            Text("Il faudra l'appairer à nouveau pour streamer.")
         }
     }
 }
@@ -363,7 +384,7 @@ struct MVComputerBanner: View {
         HStack(spacing: 12) {
             if computer.online {
                 icon("lock")
-                message("\(computer.name) n'est pas appairé", "Appaire ce Mac une fois pour pouvoir streamer.")
+                message("\(computer.name) n'est pas appairé")
                 Spacer(minLength: 8)
                 Button("Appairer") { model.openPairing(for: computer) }
                     .controlSize(.large)
@@ -372,9 +393,9 @@ struct MVComputerBanner: View {
                 switch model.wakeStates[computer.id] {
                 case .waking(let since):
                     ProgressView().controlSize(.small).frame(width: 22)
-                    message("Réveil de \(computer.name)…",
-                            model.appLaunchingAfterWake(on: computer).map { "\($0.name) se lance dès que le PC répond." }
-                                ?? "Moonvibe se connecte dès que le PC répond.")
+                        .accessibilityHidden(true)
+                    message("Réveil \(mvOf(computer.name))…",
+                            model.appLaunchingAfterWake(on: computer).map { "\($0.name) se lance dès qu'il répond." })
                     Spacer(minLength: 8)
                     TimelineView(.periodic(from: since, by: 1)) { context in
                         Text(Duration.seconds(context.date.timeIntervalSince(since)).formatted(.time(pattern: .minuteSecond)))
@@ -388,7 +409,7 @@ struct MVComputerBanner: View {
                 case .noAnswer:
                     icon("exclamationmark.triangle.fill", color: .orange)
                     message("\(computer.name) ne répond pas",
-                            "Vérifie que le Wake-on-LAN est activé sur le PC (BIOS et carte réseau) et son adresse MAC.")
+                            "Vérifie le Wake-on-LAN dans son BIOS et son adresse MAC.")
                     Spacer(minLength: 8)
                     Button("Options de réveil…") { model.wakeOptionsComputerId = computer.id }
                         .controlSize(.large)
@@ -397,8 +418,8 @@ struct MVComputerBanner: View {
                         .controlSize(.large)
                         .fixedSize()
                 case .failed:
-                    icon("exclamationmark.triangle.fill", color: Color(hex: 0xB42318))
-                    message("Réveil impossible", "Moonvibe n'a pu envoyer aucun paquet : vérifie que ce Mac est connecté au réseau.")
+                    icon("exclamationmark.triangle.fill", color: mvDanger)
+                    message("Réveil impossible", "Vérifie que ce Mac est connecté au réseau.")
                     Spacer(minLength: 8)
                     Button("Réessayer") { model.wake(computer) }
                         .controlSize(.large)
@@ -406,16 +427,14 @@ struct MVComputerBanner: View {
                 case nil:
                     icon("moon.zzz")
                     if model.canWake(computer) {
-                        message("\(computer.name) est hors ligne",
-                                computer.paired ? "Réveille-le, ou lance directement une app : Moonvibe le réveille d'abord."
-                                                : "Allume le PC ou réveille-le à distance.")
+                        message("\(computer.name) est hors ligne")
                         Spacer(minLength: 8)
                         Button("Réveiller") { model.wake(computer) }
                             .controlSize(.large)
                             .fixedSize()
                     } else {
                         message("\(computer.name) est hors ligne",
-                                "Allume le PC. Pour le réveiller à distance, renseigne son adresse MAC.")
+                                "Ajoute son adresse MAC pour le réveiller à distance.")
                         Spacer(minLength: 8)
                         Button("Options de réveil…") { model.wakeOptionsComputerId = computer.id }
                             .controlSize(.large)
@@ -438,13 +457,15 @@ struct MVComputerBanner: View {
     }
 
     // Two lines at most and first claim on the width, like the running banner
-    private func message(_ title: String, _ detail: String) -> some View {
+    private func message(_ title: String, _ detail: String? = nil) -> some View {
         VStack(alignment: .leading, spacing: 2) {
             Text(title).font(.system(size: 13, weight: .semibold))
-            Text(detail)
-                .font(.system(size: 12))
-                .foregroundStyle(.secondary)
-                .lineLimit(2)
+            if let detail {
+                Text(detail)
+                    .font(.system(size: 12))
+                    .foregroundStyle(.secondary)
+                    .lineLimit(2)
+            }
         }
         .layoutPriority(1)
         .accessibilityElement(children: .combine)
@@ -465,10 +486,11 @@ struct MVRunningBanner: View {
         HStack(spacing: 12) {
             if let target = switchTarget {
                 Image(systemName: "exclamationmark.triangle.fill")
-                    .foregroundStyle(Color(hex: 0xB42318))
+                    .foregroundStyle(mvDanger)
+                    .accessibilityHidden(true)
                 // Two lines at most, and first claim on the width: an unbounded height here
                 // let the text grow one word per line and push the whole window off screen
-                Text("**\(app.name)** tourne déjà sur \(computer.name). Le quitter pour lancer \(target.name) ? Le travail non enregistré sera perdu.")
+                Text("Quitter **\(app.name)** pour lancer \(target.name) ? Le travail non enregistré sera perdu.")
                     .font(.system(size: 13))
                     .lineLimit(2)
                     .layoutPriority(1)
@@ -476,12 +498,13 @@ struct MVRunningBanner: View {
                 Button("Annuler") { model.confirmSwitch = nil }
                     .fixedSize()
                 Button("Quitter et lancer", role: .destructive) { model.quitAndLaunch(target, on: computer) }
-                    .tint(Color(hex: 0xB42318))
+                    .tint(mvDangerFill)
                     .buttonStyle(.borderedProminent)
                     .fixedSize()
             } else if confirming {
                 Image(systemName: "exclamationmark.triangle.fill")
-                    .foregroundStyle(Color(hex: 0xB42318))
+                    .foregroundStyle(mvDanger)
+                    .accessibilityHidden(true)
                 Text("Quitter **\(app.name)** sur \(computer.name) ? Le travail non enregistré sera perdu.")
                     .font(.system(size: 13))
                     .lineLimit(2)
@@ -490,23 +513,22 @@ struct MVRunningBanner: View {
                 Button("Annuler") { model.confirmQuitComputerId = nil }
                     .fixedSize()
                 Button("Quitter", role: .destructive) { model.quitRunningApp(on: computer) }
-                    .tint(Color(hex: 0xB42318))
+                    .tint(mvDangerFill)
                     .buttonStyle(.borderedProminent)
                     .fixedSize()
             } else {
-                Circle().fill(Color(hex: 0x28B44B)).frame(width: 8, height: 8)
+                Circle().fill(mvOnline).frame(width: 8, height: 8)
                     .accessibilityHidden(true)
                 Text("**\(app.name)** tourne sur \(computer.name)")
                     .font(.system(size: 13))
                 Spacer()
                 Button("Quitter l'app") { model.confirmQuitComputerId = computer.id }
                     .disabled(model.busy)
-                    .help("Ferme \(app.name) sur le PC")
             }
         }
         .padding(.horizontal, 24)
         .padding(.vertical, 10)
-        .background((confirming ? Color(hex: 0xB42318) : Color(hex: 0x28B44B)).opacity(0.08))
+        .background((confirming ? mvDanger : mvOnline).opacity(0.08))
         .animation(.easeInOut(duration: 0.15), value: confirming)
     }
 }
@@ -528,7 +550,7 @@ struct MVAppTile: View {
                     .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
                     .overlay {
                         RoundedRectangle(cornerRadius: 20, style: .continuous)
-                            .strokeBorder(highlighted ? mvAccent : .clear, lineWidth: 3)
+                            .strokeBorder(highlighted ? mvAccentForeground : .clear, lineWidth: 3)
                             .opacity(selected ? 1 : 0.55)
                     }
 
@@ -538,23 +560,17 @@ struct MVAppTile: View {
                         .foregroundStyle(.white)
                         .padding(.horizontal, 8)
                         .padding(.vertical, 3)
-                        .background(Capsule().fill(Color(hex: 0x28B44B)))
+                        .background(Capsule().fill(mvRunningFill))
                         .padding(10)
                 }
             }
-            VStack(alignment: .leading, spacing: 1) {
-                Text(app.name).font(.system(size: 13, weight: .semibold)).lineLimit(1)
-                if let subtitle = app.subtitle {
-                    Text(subtitle).font(.system(size: 12)).foregroundStyle(.secondary).lineLimit(1)
-                }
-            }
+            Text(app.name).font(.system(size: 13, weight: .semibold)).lineLimit(1)
         }
         .saturation(enabled ? 1 : 0)
         .opacity(enabled ? 1 : 0.55)
         .contentShape(Rectangle())
         .accessibilityElement(children: .combine)
         .accessibilityAddTraits(highlighted ? .isSelected : [])
-        .accessibilityHint("Double-clic pour lancer")
     }
 
     // Icon + tint, as in the design. Sunshine's box art is portrait poster art that
@@ -576,7 +592,8 @@ struct MVQualityButton: View {
             model.showQuality.toggle()
         } label: {
             HStack(spacing: 6) {
-                Circle().fill(mvAccent).frame(width: 7, height: 7)
+                Circle().fill(mvAccentForeground).frame(width: 7, height: 7)
+                    .accessibilityHidden(true)
                 Text("\(model.preset.label) · \(model.qualitySummary)")
                     .font(.system(size: 12, weight: .medium))
                     .monospacedDigit()
@@ -654,7 +671,6 @@ struct MVPrimaryButton: View {
                 Image(systemName: systemImage)
             }
             Text(title).fontWeight(.semibold)
-            Text("↩").font(.system(size: 11, weight: .medium)).opacity(0.7)
         }
         .padding(.horizontal, 6)
     }

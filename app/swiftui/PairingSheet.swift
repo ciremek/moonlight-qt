@@ -30,15 +30,17 @@ struct MVPairingSheet: View {
 
 struct MVSheetHeader: View {
     let title: String
-    let subtitle: String
+    var subtitle: String?
 
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
             Text(title).font(.system(size: 20, weight: .bold))
-            Text(subtitle)
-                .font(.system(size: 13))
-                .foregroundStyle(.secondary)
-                .fixedSize(horizontal: false, vertical: true)
+            if let subtitle {
+                Text(subtitle)
+                    .font(.system(size: 13))
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
     }
@@ -56,8 +58,7 @@ struct MVPairingSearch: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 18) {
-            MVSheetHeader(title: "Ajouter un ordinateur",
-                          subtitle: "Moonvibe cherche les PC qui font tourner Sunshine ou Apollo sur ton réseau.")
+            MVSheetHeader(title: "Ajouter un ordinateur")
 
             VStack(alignment: .leading, spacing: 0) {
                 Text("Sur ton réseau")
@@ -117,7 +118,7 @@ struct MVPairingSearch: View {
                 if let error = model.addHostError {
                     Text(error)
                         .font(.system(size: 12))
-                        .foregroundStyle(Color(hex: 0xB42318))
+                        .foregroundStyle(mvDanger)
                         .fixedSize(horizontal: false, vertical: true)
                 }
             }
@@ -143,8 +144,7 @@ struct MVPairingPin: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 18) {
-            MVSheetHeader(title: "Appairer \(name)",
-                          subtitle: "Saisis ce code sur \(name) pour autoriser ce Mac.")
+            MVSheetHeader(title: "Appairer \(name)")
 
             HStack(spacing: 10) {
                 ForEach(Array(paddedPin.enumerated()), id: \.offset) { _, digit in
@@ -166,7 +166,7 @@ struct MVPairingPin: View {
 
             HStack(spacing: 10) {
                 ProgressView().controlSize(.small)
-                Text("En attente de \(name)…")
+                Text("En attente \(mvOf(name))…")
                     .font(.system(size: 12))
                     .foregroundStyle(.secondary)
                 Spacer()
@@ -205,9 +205,10 @@ private struct MVPairingInstruction: View {
         HStack(alignment: .firstTextBaseline, spacing: 8) {
             Text("\(number)")
                 .font(.system(size: 11, weight: .bold))
-                .foregroundStyle(mvAccent)
+                .foregroundStyle(mvAccentForeground)
                 .frame(width: 18, height: 18)
                 .background(Circle().fill(mvAccent.opacity(0.14)))
+                .accessibilityHidden(true)
             Text(text).font(.system(size: 13))
         }
     }
@@ -219,26 +220,14 @@ struct MVPairingDone: View {
     @ObservedObject var model: MVModel
     let computer: MVComputer?
 
-    private var appsText: String {
-        let names = computer?.apps.map(\.name) ?? []
-        switch names.count {
-        case 0: return "Ses apps arrivent dans un instant."
-        case 1: return "\(names[0]) est disponible."
-        default: return names.dropLast().joined(separator: ", ") + " et \(names.last!) sont disponibles."
-        }
-    }
-
     var body: some View {
         VStack(spacing: 14) {
             Image(systemName: "checkmark.circle.fill")
                 .font(.system(size: 44))
-                .foregroundStyle(Color(hex: 0x28B44B))
+                .foregroundStyle(.green)
+                .accessibilityHidden(true)
             Text("\(computer?.name ?? "Ton PC") est prêt")
                 .font(.system(size: 20, weight: .bold))
-            Text(appsText)
-                .font(.system(size: 13))
-                .foregroundStyle(.secondary)
-                .multilineTextAlignment(.center)
             MVPrimaryButton(title: "C'est parti", busy: false, disabled: false) {
                 model.finishPairing()
             }
@@ -260,7 +249,8 @@ struct MVPairingFailed: View {
             HStack(spacing: 10) {
                 Image(systemName: "exclamationmark.triangle.fill")
                     .font(.system(size: 22))
-                    .foregroundStyle(Color(hex: 0xB42318))
+                    .foregroundStyle(mvDanger)
+                    .accessibilityHidden(true)
                 Text("L'appairage n'a pas abouti")
                     .font(.system(size: 20, weight: .bold))
             }

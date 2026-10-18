@@ -278,7 +278,7 @@ struct MVControlBar: View {
     var body: some View {
         HStack(spacing: 6) {
             HStack(spacing: 6) {
-                Circle().fill(Color(hex: 0x28B44B)).frame(width: 7, height: 7)
+                Circle().fill(mvOnline).frame(width: 7, height: 7)
                     .accessibilityHidden(true)
                 Text("\(model.info.computer) · \(model.info.app)")
                     .font(.system(size: 12, weight: .semibold))
@@ -312,7 +312,7 @@ struct MVControlBar: View {
                     MVKeycap("⌃⌥⇧Q")
                 }
                 .font(.system(size: 12, weight: .semibold))
-                .foregroundStyle(Color(hex: 0xB42318))
+                .foregroundStyle(mvDanger)
                 .padding(.horizontal, 10)
                 .padding(.vertical, 6)
                 .contentShape(Capsule())
@@ -356,14 +356,8 @@ struct MVStatsCard: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
-            HStack {
-                Text("Stats").font(.system(size: 13, weight: .bold))
-                Spacer()
-                HStack(spacing: 4) {
-                    Circle().fill(Color(hex: 0x28B44B)).frame(width: 6, height: 6)
-                    Text("en direct").font(.system(size: 11)).foregroundStyle(.secondary)
-                }
-            }
+            Text("Stats").font(.system(size: 13, weight: .bold))
+                .accessibilityAddTraits(.isHeader)
 
             if let stats = model.stats {
                 HStack(alignment: .firstTextBaseline, spacing: 4) {
@@ -371,6 +365,8 @@ struct MVStatsCard: View {
                         .font(.system(size: 34, weight: .bold).monospacedDigit())
                     Text("images/s").font(.system(size: 12)).foregroundStyle(.secondary)
                 }
+                .accessibilityElement(children: .ignore)
+                .accessibilityLabel("\(Int(stats.fps.rounded())) images par seconde")
                 VStack(spacing: 0) {
                     MVStatRow(label: "Résolution", value: "\(stats.width)×\(stats.height)")
                     MVStatRow(label: "Débit", value: String(format: "%.0f / %.0f Mb/s", stats.bitrateMbps, model.info.targetMbps))
@@ -389,6 +385,7 @@ struct MVStatsCard: View {
                 MVKeycap("⌃⌥⇧S")
                 Text("pour masquer").font(.system(size: 11)).foregroundStyle(.secondary)
             }
+            .accessibilityHidden(true)
         }
         .padding(14)
         .frame(width: 230)
@@ -411,6 +408,7 @@ private struct MVStatRow: View {
         .font(.system(size: 11))
         .padding(.vertical, 4)
         .overlay(alignment: .bottom) { Divider().opacity(0.5) }
+        .accessibilityElement(children: .combine)
     }
 }
 

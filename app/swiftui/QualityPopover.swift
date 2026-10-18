@@ -26,7 +26,7 @@ struct MVQualityPopover: View {
                     Image(systemName: "chevron.right")
                         .font(.system(size: 11, weight: .semibold))
                         .rotationEffect(.degrees(showDetails ? 90 : 0))
-                    Text(model.preset == .custom ? "Personnaliser · Perso" : "Personnaliser")
+                    Text("Personnaliser")
                         .font(.system(size: 13, weight: .semibold))
                     Spacer()
                 }
@@ -60,7 +60,7 @@ struct MVPresetCard: View {
     private var selected: Bool { model.preset == preset }
 
     private var summary: String {
-        model.summary(for: preset) ?? "Modifie un réglage ci-dessous pour le créer"
+        model.summary(for: preset) ?? "Pas encore enregistré"
     }
 
     var body: some View {
@@ -70,21 +70,14 @@ struct MVPresetCard: View {
             HStack(spacing: 12) {
                 Image(systemName: selected ? "largecircle.fill.circle" : "circle")
                     .font(.system(size: 16))
-                    .foregroundStyle(selected ? mvAccent : .secondary)
-                VStack(alignment: .leading, spacing: 2) {
-                    HStack {
-                        Text(preset.label).font(.system(size: 13, weight: .semibold))
-                        Spacer()
-                        Text(summary)
-                            .font(.system(size: 11))
-                            .monospacedDigit()
-                            .foregroundStyle(.secondary)
-                    }
-                    Text(preset.help)
-                        .font(.system(size: 12))
-                        .foregroundStyle(.secondary)
-                        .fixedSize(horizontal: false, vertical: true)
-                }
+                    .foregroundStyle(selected ? mvAccentForeground : .secondary)
+                    .accessibilityHidden(true)
+                Text(preset.label).font(.system(size: 13, weight: .semibold))
+                Spacer()
+                Text(summary)
+                    .font(.system(size: 11))
+                    .monospacedDigit()
+                    .foregroundStyle(.secondary)
             }
             .padding(12)
             .background(
@@ -98,11 +91,12 @@ struct MVPresetCard: View {
             )
             .overlay(
                 RoundedRectangle(cornerRadius: 14, style: .continuous)
-                    .strokeBorder(selected ? mvAccent.opacity(0.6) : .clear, lineWidth: 1.5)
+                    .strokeBorder(selected ? mvAccentForeground.opacity(0.6) : .clear, lineWidth: 1.5)
             )
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
+        .help(preset.help)
         .accessibilityAddTraits(selected ? .isSelected : [])
     }
 }
@@ -170,6 +164,7 @@ struct MVOptionToggle: View {
     var body: some View {
         HStack {
             Text(title).font(.system(size: 13))
+                .accessibilityHidden(true)
             Spacer()
             Toggle(title, isOn: Binding(get: { isOn }, set: onChange))
                 .toggleStyle(.switch)
