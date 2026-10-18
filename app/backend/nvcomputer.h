@@ -69,6 +69,11 @@ public:
     QVector<NvAddress>
     uniqueAddresses() const;
 
+    // Whether an IP address belongs to a network this machine is directly on,
+    // which excludes the point-to-point tunnels of VPNs like Tailscale
+    static bool
+    isOnLocalNetwork(const QString& address);
+
     void
     serialize(QSettings& settings, bool serializeApps) const;
 

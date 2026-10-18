@@ -52,6 +52,26 @@ private:
         return true;
     }
 
+    // The LAN address comes first whenever this machine is on that LAN, so the host
+    // doesn't stick to whichever address answered last, like a VPN one (Tailscale, say)
+    // used while away. Elsewhere, the address that last worked keeps its turn first.
+    QVector<NvAddress> pollingOrder()
+    {
+        QVector<NvAddress> addresses = m_Computer->uniqueAddresses();
+
+        NvAddress localAddress;
+        {
+            QReadLocker lock(&m_Computer->lock);
+            localAddress = m_Computer->localAddress;
+        }
+
+        if (!localAddress.isNull() && NvComputer::isOnLocalNetwork(localAddress.address())) {
+            addresses.removeOne(localAddress);
+            addresses.prepend(localAddress);
+        }
+        return addresses;
+    }
+
     bool updateAppList(QNetworkAccessManager* nam, bool& changed)
     {
         NvHTTP http(m_Computer, nam);
@@ -96,7 +116,7 @@ private:
             bool online = false;
             bool wasOnline = m_Computer->state == NvComputer::CS_ONLINE;
             for (int i = 0; i < (wasOnline ? TRIES_BEFORE_OFFLINING : 1) && !online; i++) {
-                for (auto& address : m_Computer->uniqueAddresses()) {
+                for (auto& address : pollingOrder()) {
                     if (isInterruptionRequested()) {
                         return;
                     }

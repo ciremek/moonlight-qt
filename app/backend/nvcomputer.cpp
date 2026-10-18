@@ -175,6 +175,12 @@ NvComputer::NvComputer(NvHTTP& http, QString serverInfo)
     if (this->localAddress.address().startsWith("127.")) {
         this->localAddress = NvAddress();
     }
+    // Sunshine reports the address it was reached at. Through a VPN (Tailscale, say),
+    // that's the VPN address, which must not replace the host's LAN address.
+    else if (QHostAddress(this->localAddress.address()) == QHostAddress(http.address().address()) &&
+             !isOnLocalNetwork(this->localAddress.address())) {
+        this->localAddress = NvAddress();
+    }
 
     QString httpsPort = NvHTTP::getXmlString(serverInfo, "HttpsPort");
     if (httpsPort.isEmpty() || (this->activeHttpsPort = httpsPort.toUShort()) == 0) {
@@ -509,6 +515,31 @@ bool NvComputer::updateAppList(QVector<NvApp> newAppList) {
     appList = newAppList;
     sortAppList();
     return true;
+}
+
+bool NvComputer::isOnLocalNetwork(const QString& address)
+{
+    QHostAddress hostAddress;
+    if (!hostAddress.setAddress(address)) {
+        return false;
+    }
+
+    const auto allInterfaces = QNetworkInterface::allInterfaces();
+    for (const QNetworkInterface& nic : allInterfaces) {
+        if ((nic.flags() & QNetworkInterface::IsUp) == 0 ||
+                (nic.flags() & (QNetworkInterface::IsLoopBack | QNetworkInterface::IsPointToPoint)) != 0) {
+            continue;
+        }
+
+        const auto addressEntries = nic.addressEntries();
+        for (const QNetworkAddressEntry& entry : addressEntries) {
+            if (entry.prefixLength() >= 0 && hostAddress.isInSubnet(entry.ip(), entry.prefixLength())) {
+                return true;
+            }
+        }
+    }
+
+    return false;
 }
 
 QVector<NvAddress> NvComputer::uniqueAddresses() const
