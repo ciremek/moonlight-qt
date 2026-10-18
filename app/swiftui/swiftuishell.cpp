@@ -444,7 +444,9 @@ void SwiftUIShell::setStatus(const QString& text, bool busy, bool error, bool ca
 
 void SwiftUIShell::launch(const QString& computerUuid, int appId, const QPoint& displayOrigin)
 {
+    // The previous session is still cleaning up, for a few seconds at most
     if (m_Session != nullptr) {
+        setStatus(QStringLiteral("Le stream précédent se termine, réessaie dans un instant."), false);
         return;
     }
 
@@ -511,17 +513,13 @@ void SwiftUIShell::launch(const QString& computerUuid, int appId, const QPoint& 
         mv_ui_set_visible(false);
     });
     // Brings Home back once, when the stream window goes away. With "quit the app after
-    // streaming", that's before the quit request, which waits up to 30 seconds for a PC
-    // that stopped answering (asleep, say): Home shows the quit in progress meanwhile.
-    auto restoreHome = [this, restored = std::make_shared<bool>(false)] {
+    // streaming", that's before the session checks the PC and asks it to quit the app:
+    // Home shows the quit in progress meanwhile.
+    auto restoreHome = [restored = std::make_shared<bool>(false)] {
         if (*restored) {
             return;
         }
         *restored = true;
-        setPolling(true);
-        if (qApp->applicationState() != Qt::ApplicationActive) {
-            m_InactivityTimer.start();
-        }
         mv_ui_set_visible(true);
     };
     QString appName = app.name;
@@ -537,6 +535,12 @@ void SwiftUIShell::launch(const QString& computerUuid, int appId, const QPoint& 
     connect(m_Session, &Session::readyForDeletion, this, [this] {
         m_Session->deleteLater();
         m_Session = nullptr;
+        // Polling resumes once the session has checked the PC is still there,
+        // so it starts from the right state instead of overwriting it
+        setPolling(true);
+        if (qApp->applicationState() != Qt::ApplicationActive) {
+            m_InactivityTimer.start();
+        }
         pushComputers();
     });
 

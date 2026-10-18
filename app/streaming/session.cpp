@@ -1399,15 +1399,32 @@ private:
         // Finish cleanup of the connection state
         LiStopConnection();
 
+        // Check the host is still there. One that stopped answering (asleep, say)
+        // would hold the quit request for its whole 30-second timeout, and would
+        // show as online until polling, which is off during the stream, catches up.
+        bool hostAnswered = true;
+        try {
+            NvHTTP(m_Session->m_Computer).getServerInfo(NvHTTP::NVLL_ERROR, true);
+        } catch (const GfeHttpResponseException&) {
+        } catch (const QtNetworkReplyException&) {
+            hostAnswered = false;
+        }
+        if (!hostAnswered) {
+            QWriteLocker lock(&m_Session->m_Computer->lock);
+            m_Session->m_Computer->state = NvComputer::CS_OFFLINE;
+        }
+
         // Perform a best-effort app quit
         if (shouldQuit) {
-            NvHTTP http(m_Session->m_Computer);
+            if (hostAnswered) {
+                NvHTTP http(m_Session->m_Computer);
 
-            // Logging is already done inside NvHTTP
-            try {
-                http.quitApp();
-            } catch (const GfeHttpResponseException&) {
-            } catch (const QtNetworkReplyException&) {
+                // Logging is already done inside NvHTTP
+                try {
+                    http.quitApp();
+                } catch (const GfeHttpResponseException&) {
+                } catch (const QtNetworkReplyException&) {
+                }
             }
 
             // Session is finished now
