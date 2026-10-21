@@ -90,6 +90,17 @@ private struct MVStatus: Decodable {
     let busy: Bool
     let error: Bool
     let cancellable: Bool
+    let args: [String]?
+}
+
+/// A message from the Qt host: its French text is the key of the translation, with Qt-style
+/// %1, %2 placeholders filled from args. Text that isn't a key comes back as is.
+func mvHostMessage(_ key: String, _ args: [String]) -> String {
+    var text = Bundle.main.localizedString(forKey: key, value: key, table: nil)
+    for (index, arg) in args.enumerated() {
+        text = text.replacingOccurrences(of: "%\(index + 1)", with: arg)
+    }
+    return text
 }
 
 @_cdecl("mv_ui_set_status")
@@ -102,9 +113,9 @@ public func mvUiSetStatus(_ json: UnsafePointer<CChar>) {
         if status.error {
             model.status = ""
             model.cancelPendingLaunch()
-            model.errorMessage = status.text
+            model.errorMessage = mvHostMessage(status.text, status.args ?? [])
         } else {
-            model.status = status.text
+            model.status = mvHostMessage(status.text, status.args ?? [])
         }
     }
 }

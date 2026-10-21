@@ -155,8 +155,8 @@ struct MVAppSettingsSheet: View {
                 .overlay(Circle().strokeBorder(selected ? mvAccentForeground : .clear, lineWidth: 2))
         }
         .buttonStyle(.plain)
-        .help(color?.label ?? "Sans couleur")
-        .accessibilityLabel(color?.label ?? "Sans couleur")
+        .help(color?.label ?? String(localized: "Sans couleur"))
+        .accessibilityLabel(color?.label ?? String(localized: "Sans couleur"))
         .accessibilityAddTraits(selected ? .isSelected : [])
     }
 
@@ -186,7 +186,7 @@ struct MVAppSettingsSheet: View {
         panel.allowsMultipleSelection = true
         panel.canChooseDirectories = false
         panel.directoryURL = URL(fileURLWithPath: "/Applications")
-        panel.prompt = "Ajouter"
+        panel.prompt = String(localized: "Ajouter")
         guard panel.runModal() == .OK else { return }
         for url in panel.urls where !settings.openApps.contains(url.path) {
             settings.openApps.append(url.path)

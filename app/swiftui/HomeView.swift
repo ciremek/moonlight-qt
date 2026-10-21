@@ -42,8 +42,10 @@ let mvOnline = Color(hex: 0x28B44B)
 /// The running badge, a fill under white text.
 let mvRunningFill = Color(hex: 0x1E7E36)
 
-/// "de" before a name, elided before a vowel: "d'AZATOTH", "de Steam".
+/// "de" before a name, elided before a vowel in French ("d'AZATOTH", "de Steam"). Other
+/// languages get the name alone: their translations place it themselves.
 func mvOf(_ name: String) -> String {
+    guard Bundle.main.preferredLocalizations.first == "fr" else { return name }
     let first = name.folding(options: [.diacriticInsensitive, .caseInsensitive], locale: nil).first
     return first.map { "aeiou".contains($0) } == true ? "d'\(name)" : "de \(name)"
 }
@@ -212,8 +214,8 @@ struct MVComputerRow: View {
     let waking: Bool
 
     private var stateText: String {
-        if computer.online { return computer.paired ? "En ligne" : "Non appairé" }
-        return waking ? "Réveil en cours…" : "Hors ligne"
+        if computer.online { return computer.paired ? String(localized: "En ligne") : String(localized: "Non appairé") }
+        return waking ? String(localized: "Réveil en cours…") : String(localized: "Hors ligne")
     }
 
     var body: some View {
@@ -417,7 +419,9 @@ struct MVComputerBanner: View {
                     ProgressView().controlSize(.small).frame(width: 22)
                         .accessibilityHidden(true)
                     message("Réveil \(mvOf(computer.name))…",
-                            model.appLaunchingAfterWake(on: computer).map { "\($0.name) se lance dès qu'il répond." })
+                            model.appLaunchingAfterWake(on: computer).map { app -> LocalizedStringKey in
+                                "\(app.name) se lance dès qu'il répond."
+                            })
                     Spacer(minLength: 8)
                     TimelineView(.periodic(from: since, by: 1)) { context in
                         Text(Duration.seconds(context.date.timeIntervalSince(since)).formatted(.time(pattern: .minuteSecond)))
@@ -479,7 +483,7 @@ struct MVComputerBanner: View {
     }
 
     // Two lines at most and first claim on the width, like the running banner
-    private func message(_ title: String, _ detail: String? = nil) -> some View {
+    private func message(_ title: LocalizedStringKey, _ detail: LocalizedStringKey? = nil) -> some View {
         VStack(alignment: .leading, spacing: 2) {
             Text(title).font(.system(size: 13, weight: .semibold))
             if let detail {
@@ -661,7 +665,7 @@ struct MVLaunchBar: View {
                     .help("Pendant le stream : ⌃⌥⇧Q pour quitter, ⌃⌥⇧S pour les stats, ⌃⌥⇧Z pour libérer la souris")
             }
 
-            Text(model.busy && model.cancellable ? "\(model.status)  ·  esc pour annuler" : model.status)
+            (model.busy && model.cancellable ? Text("\(model.status)  ·  esc pour annuler") : Text(model.status))
                 .font(.system(size: 12))
                 .foregroundStyle(.secondary)
                 .lineLimit(2)
@@ -686,7 +690,7 @@ struct MVLaunchBar: View {
             }
         } else {
             let resuming = app.id == computer.runningAppId
-            MVPrimaryButton(title: "\(resuming ? "Reprendre" : "Lancer") \(app.name)",
+            MVPrimaryButton(title: resuming ? "Reprendre \(app.name)" : "Lancer \(app.name)",
                             busy: model.busy,
                             disabled: !model.canLaunch(on: computer)) {
                 model.requestLaunch(app, on: computer)
@@ -696,7 +700,7 @@ struct MVLaunchBar: View {
 }
 
 struct MVPrimaryButton: View {
-    let title: String
+    let title: LocalizedStringKey
     var systemImage = "play.fill"
     let busy: Bool
     let disabled: Bool

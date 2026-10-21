@@ -44,7 +44,10 @@ private:
     void deleteHost(const QString& computerUuid);
     void applyPrefs(const QJsonObject& prefs);
     void pushPrefs();
-    void setStatus(const QString& text, bool busy, bool error = false, bool cancellable = true);
+    // The shell's own messages are French templates with Qt-style %1 placeholders, which
+    // the SwiftUI side translates and fills with args. Other text passes through as is.
+    void setStatus(const QString& text, bool busy, bool error = false, bool cancellable = true,
+                   const QStringList& args = {});
     void setPolling(bool enabled);
     void handleApplicationStateChanged(Qt::ApplicationState state);
     NvComputer* findComputer(const QString& uuid);
@@ -58,4 +61,5 @@ private:
     bool m_Polling;
     QTimer m_InactivityTimer;
     QString m_LaunchError;
+    QStringList m_LaunchErrorArgs;
 };

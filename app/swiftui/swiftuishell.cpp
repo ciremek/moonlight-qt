@@ -540,13 +540,14 @@ void SwiftUIShell::handleComputerAddCompleted(QVariant success, QVariant detecte
     pushComputers();
 }
 
-void SwiftUIShell::setStatus(const QString& text, bool busy, bool error, bool cancellable)
+void SwiftUIShell::setStatus(const QString& text, bool busy, bool error, bool cancellable, const QStringList& args)
 {
     QJsonObject status {
         { "text", text },
         { "busy", busy },
         { "error", error },
         { "cancellable", cancellable },
+        { "args", QJsonArray::fromStringList(args) },
     };
     mv_ui_set_status(toJson(status).constData());
 }
@@ -577,6 +578,7 @@ void SwiftUIShell::launch(const QString& computerUuid, int appId, const QPoint& 
     }
 
     m_LaunchError.clear();
+    m_LaunchErrorArgs.clear();
 
     // An app with its own quality streams with a copy of the preferences, adjusted for
     // this stream only: the saved preferences don't change, even if Moonvibe quits mid-stream
@@ -624,16 +626,22 @@ void SwiftUIShell::launch(const QString& computerUuid, int appId, const QPoint& 
     }, Qt::DirectConnection);
 
     connect(m_Session, &Session::stageStarting, this, [this](QString stage) {
-        setStatus(QStringLiteral("Démarrage : %1…").arg(stage), true);
+        setStatus(QStringLiteral("Démarrage : %1…"), true, false, true, { stage });
     });
     connect(m_Session, &Session::stageFailed, this, [this](QString stage, int errorCode, QString failingPorts) {
-        m_LaunchError = QStringLiteral("Échec au démarrage de %1 (erreur %2).").arg(stage).arg(errorCode);
-        if (!failingPorts.isEmpty()) {
-            m_LaunchError += "\n\n" + QStringLiteral("Vérifie ton pare-feu et la redirection des ports : %1").arg(failingPorts);
+        if (failingPorts.isEmpty()) {
+            m_LaunchError = QStringLiteral("Échec au démarrage de %1 (erreur %2).");
+            m_LaunchErrorArgs = { stage, QString::number(errorCode) };
+        }
+        else {
+            m_LaunchError = QStringLiteral("Échec au démarrage de %1 (erreur %2).\n\nVérifie ton pare-feu et la redirection des ports : %3");
+            m_LaunchErrorArgs = { stage, QString::number(errorCode), failingPorts };
         }
     });
     connect(m_Session, &Session::displayLaunchError, this, [this](QString text) {
+        // Session's own errors, already translated by Qt
         m_LaunchError = text;
+        m_LaunchErrorArgs.clear();
     });
     connect(m_Session, &Session::connectionStarted, this, [] {
         mv_ui_set_visible(false);
@@ -652,11 +660,11 @@ void SwiftUIShell::launch(const QString& computerUuid, int appId, const QPoint& 
     connect(m_Session, &Session::quitStarting, this, [this, restoreHome, appName] {
         restoreHome();
         // A new stream can't start until the quit is over, and it can't be cancelled
-        setStatus(QStringLiteral("%1 se ferme sur le PC…").arg(appName), true, false, false);
+        setStatus(QStringLiteral("%1 se ferme sur le PC…"), true, false, false, { appName });
     });
     connect(m_Session, &Session::sessionFinished, this, [this, restoreHome](int) {
         restoreHome();
-        setStatus(m_LaunchError, false, !m_LaunchError.isEmpty());
+        setStatus(m_LaunchError, false, !m_LaunchError.isEmpty(), true, m_LaunchErrorArgs);
     });
     connect(m_Session, &Session::readyForDeletion, this, [this] {
         m_Session->deleteLater();
@@ -670,10 +678,15 @@ void SwiftUIShell::launch(const QString& computerUuid, int appId, const QPoint& 
         pushComputers();
     });
 
-    setStatus(QStringLiteral("Démarrage : %1…").arg(app.name), true);
+    setStatus(QStringLiteral("Démarrage : %1…"), true, false, true, { app.name });
 
     if (!m_Session->initialize(nullptr)) {
-        setStatus(m_LaunchError.isEmpty() ? QStringLiteral("Impossible de préparer le stream.") : m_LaunchError, false, true);
+        if (m_LaunchError.isEmpty()) {
+            setStatus(QStringLiteral("Impossible de préparer le stream."), false, true);
+        }
+        else {
+            setStatus(m_LaunchError, false, true, true, m_LaunchErrorArgs);
+        }
         m_Session->deleteLater();
         m_Session = nullptr;
         return;

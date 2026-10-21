@@ -60,7 +60,7 @@ struct MVPresetCard: View {
     private var selected: Bool { model.preset == preset }
 
     private var summary: String {
-        model.summary(for: preset) ?? "Pas encore enregistré"
+        model.summary(for: preset) ?? String(localized: "Pas encore enregistré")
     }
 
     var body: some View {
@@ -156,9 +156,9 @@ struct MVQualityDetails: View {
 }
 
 struct MVOptionToggle: View {
-    let title: String
+    let title: LocalizedStringKey
     let isOn: Bool
-    var help: String?
+    var help: LocalizedStringKey?
     let onChange: (Bool) -> Void
 
     var body: some View {

@@ -1,0 +1,2 @@
+"NSLocalNetworkUsageDescription" = "Moonvibe uses the local network to connect to your gaming PC for streaming.";
+"NSAppleEventsUsageDescription" = "Moonvibe quits the apps it opened for a stream once the stream ends.";

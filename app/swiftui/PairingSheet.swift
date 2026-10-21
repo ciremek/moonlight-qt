@@ -29,8 +29,8 @@ struct MVPairingSheet: View {
 }
 
 struct MVSheetHeader: View {
-    let title: String
-    var subtitle: String?
+    let title: LocalizedStringKey
+    var subtitle: LocalizedStringKey?
 
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
@@ -140,7 +140,7 @@ struct MVPairingPin: View {
     let pin: String
     @State private var copied = false
 
-    private var name: String { computer?.name ?? "ton PC" }
+    private var name: String { computer?.name ?? String(localized: "ton PC") }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 18) {
@@ -226,7 +226,7 @@ struct MVPairingDone: View {
                 .font(.system(size: 44))
                 .foregroundStyle(.green)
                 .accessibilityHidden(true)
-            Text("\(computer?.name ?? "Ton PC") est prêt")
+            Text("\(computer?.name ?? String(localized: "Ton PC")) est prêt")
                 .font(.system(size: 20, weight: .bold))
             MVPrimaryButton(title: "C'est parti", busy: false, disabled: false) {
                 model.finishPairing()

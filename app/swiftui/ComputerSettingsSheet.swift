@@ -161,7 +161,7 @@ struct MVComputerSettingsSheet: View {
             }
             .buttonStyle(.borderless)
             .help("Retirer cette adresse")
-            .accessibilityLabel("Retirer \(text.isEmpty ? "cette adresse" : text)")
+            .accessibilityLabel(text.isEmpty ? Text("Retirer cette adresse") : Text("Retirer \(text)"))
         }
     }
 
@@ -223,12 +223,12 @@ private struct MVAddressTestStatus: View {
         }
     }
 
-    private func icon(_ name: String, color: Color, help: String) -> some View {
+    private func icon(_ name: String, color: Color, help: LocalizedStringKey) -> some View {
         Button(action: action) {
             Image(systemName: name).foregroundStyle(color)
         }
         .buttonStyle(.borderless)
-        .help("\(help). Clique pour retester.")
+        .help(help)
         .accessibilityLabel(help)
         .frame(width: 20)
     }

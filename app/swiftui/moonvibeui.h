@@ -11,7 +11,8 @@
 //                addresses: [{address, port, kind: "local" | "remote" | "ipv6" | "manual", active}]}]
 // - prefs: {resolutionMode, width, height, fps, bitrateKbps, windowMode,
 //           vsync, framePacing, hdr, muteHost, disableAwdl}
-// - status: {text, busy, error, cancellable}
+// - status: {text, busy, error, cancellable, args}: text is a French template with %1, %2…
+//   placeholders for args, which the UI translates; text without args may be final text
 // - pairing: {uuid, stage: "waiting" | "paired" | "failed", pin, error}
 // - add host result: {success, portBlocking}
 // - wake result: {uuid, sent}

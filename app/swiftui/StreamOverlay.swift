@@ -329,7 +329,7 @@ struct MVControlBar: View {
 }
 
 struct MVBarButton: View {
-    let title: String
+    let title: LocalizedStringKey
     let symbol: String
     let active: Bool
     let shortcut: String
@@ -346,7 +346,7 @@ struct MVBarButton: View {
                 .contentShape(Capsule())
         }
         .buttonStyle(.plain)
-        .help("\(title) (\(shortcut))")
+        .help(Text(title) + Text(verbatim: " (\(shortcut))"))
         .accessibilityAddTraits(active ? .isSelected : [])
     }
 }
@@ -396,7 +396,7 @@ struct MVStatsCard: View {
 }
 
 private struct MVStatRow: View {
-    let label: String
+    let label: LocalizedStringKey
     let value: String
 
     var body: some View {

@@ -36,8 +36,8 @@ struct MVComputer: Decodable, Identifiable, Hashable {
     var id: String { uuid }
 
     var statusText: String {
-        if !online { return "Hors ligne" }
-        return paired ? "En ligne · appairé" : "En ligne · non appairé"
+        if !online { return String(localized: "Hors ligne") }
+        return paired ? String(localized: "En ligne · appairé") : String(localized: "En ligne · non appairé")
     }
 
     var runningApp: MVApp? { apps.first { $0.id == runningAppId } }
@@ -54,9 +54,9 @@ enum MVWindowMode: Int, Codable, CaseIterable, Identifiable {
     var id: Int { rawValue }
     var label: String {
         switch self {
-        case .fullscreen: return "Plein écran"
-        case .borderless: return "Fenêtre sans bordure"
-        case .windowed: return "Fenêtre"
+        case .fullscreen: return String(localized: "Plein écran")
+        case .borderless: return String(localized: "Fenêtre sans bordure")
+        case .windowed: return String(localized: "Fenêtre")
         }
     }
 }
@@ -120,19 +120,19 @@ enum MVPreset: String, CaseIterable, Identifiable, Codable {
 
     var label: String {
         switch self {
-        case .fluid: return "Fluide"
-        case .balanced: return "Équilibré"
-        case .max: return "Max"
-        case .custom: return "Perso"
+        case .fluid: return String(localized: "Fluide")
+        case .balanced: return String(localized: "Équilibré")
+        case .max: return String(localized: "Max")
+        case .custom: return String(localized: "Perso")
         }
     }
 
     var help: String {
         switch self {
-        case .fluid: return "Latence minimale, idéal en Wi-Fi."
-        case .balanced: return "Le compromis entre netteté et fluidité."
-        case .max: return "Résolution native. Câble ou Wi-Fi 6 conseillé."
-        case .custom: return "Tes réglages, enregistrés dès que tu les modifies."
+        case .fluid: return String(localized: "Latence minimale, idéal en Wi-Fi.")
+        case .balanced: return String(localized: "Le compromis entre netteté et fluidité.")
+        case .max: return String(localized: "Résolution native. Câble ou Wi-Fi 6 conseillé.")
+        case .custom: return String(localized: "Tes réglages, enregistrés dès que tu les modifies.")
         }
     }
 
@@ -272,15 +272,15 @@ enum MVTileColor: String, Codable, CaseIterable, Identifiable {
 
     var label: String {
         switch self {
-        case .indigo: return "Indigo"
-        case .blue: return "Bleu"
-        case .teal: return "Turquoise"
-        case .green: return "Vert"
-        case .orange: return "Orange"
-        case .red: return "Rouge"
-        case .pink: return "Rose"
-        case .purple: return "Violet"
-        case .graphite: return "Graphite"
+        case .indigo: return String(localized: "Indigo")
+        case .blue: return String(localized: "Bleu")
+        case .teal: return String(localized: "Turquoise")
+        case .green: return String(localized: "Vert")
+        case .orange: return String(localized: "Orange")
+        case .red: return String(localized: "Rouge")
+        case .pink: return String(localized: "Rose")
+        case .purple: return String(localized: "Violet")
+        case .graphite: return String(localized: "Graphite")
         }
     }
 }
@@ -321,10 +321,10 @@ struct MVAddress: Decodable, Hashable {
 
     var kindLabel: String {
         switch kind {
-        case "local": return "Réseau local"
-        case "remote": return "IP publique"
+        case "local": return String(localized: "Réseau local")
+        case "remote": return String(localized: "IP publique")
         case "ipv6": return "IPv6"
-        default: return MVAddress.autoLabel(for: text) ?? "Ajoutée"
+        default: return MVAddress.autoLabel(for: text) ?? String(localized: "Ajoutée")
         }
     }
 
@@ -394,9 +394,9 @@ struct MVRecent: Codable, Identifiable, Hashable {
 
     var dateText: String {
         let calendar = Calendar.current
-        if calendar.isDateInToday(date) { return "aujourd'hui" }
-        if calendar.isDateInYesterday(date) { return "hier" }
-        return date.formatted(.dateTime.day().month(.abbreviated).locale(Locale(identifier: "fr_FR")))
+        if calendar.isDateInToday(date) { return String(localized: "aujourd'hui") }
+        if calendar.isDateInYesterday(date) { return String(localized: "hier") }
+        return date.formatted(.dateTime.day().month(.abbreviated))
     }
 }
 
@@ -541,17 +541,17 @@ final class MVModel: ObservableObject {
             values.width = custom.width
             values.height = custom.height
             let (width, height) = display.resolution(for: custom.resolutionMode, prefs: values)
-            return "\(width)×\(height) · \(custom.fps) i/s · \(custom.bitrateKbps / 1000) Mb/s"
+            return String(localized: "\(width)×\(height) · \(custom.fps) i/s · \(custom.bitrateKbps / 1000) Mb/s")
         }
         let (width, height) = display.resolution(for: preset.resolutionMode, prefs: prefs)
-        return "\(width)×\(height) · \(display.maxFps) i/s · \(preset.bitrateKbps / 1000) Mb/s"
+        return String(localized: "\(width)×\(height) · \(display.maxFps) i/s · \(preset.bitrateKbps / 1000) Mb/s")
     }
 
     var streamResolution: (Int, Int) { display.resolution(for: prefs.resolutionMode, prefs: prefs) }
 
     var qualitySummary: String {
         let (width, height) = streamResolution
-        return "\(width)×\(height) · \(prefs.fps) i/s · \(prefs.bitrateKbps / 1000) Mb/s"
+        return String(localized: "\(width)×\(height) · \(prefs.fps) i/s · \(prefs.bitrateKbps / 1000) Mb/s")
     }
 
     func canLaunch(on computer: MVComputer) -> Bool {
@@ -694,7 +694,7 @@ final class MVModel: ObservableObject {
         }
         busy = true
         cancellable = true
-        status = "Connexion à \(computer.name)…"
+        status = String(localized: "Connexion à \(computer.name)…")
         rememberRecent(app, on: computer)
 
         let settings = self.settings(of: app, on: computer)
@@ -745,7 +745,8 @@ final class MVModel: ObservableObject {
         confirmSwitch = nil
         launchAfterQuit = MVAppRef(computerId: computer.id, appId: app.id)
         quitRunningApp(on: computer)
-        status = "\(computer.runningApp?.name ?? "L'app en cours") se ferme, puis \(app.name) se lance…"
+        let running = computer.runningApp?.name ?? String(localized: "L'app en cours")
+        status = String(localized: "\(running) se ferme, puis \(app.name) se lance…")
     }
 
     /// The host failed to quit the app: drop the launch waiting for it.
@@ -769,7 +770,7 @@ final class MVModel: ObservableObject {
         switch pairing.stage {
         case "waiting": pairingStep = .waiting(computerId: pairing.uuid, pin: pairing.pin ?? "")
         case "paired": pairingStep = .paired(computerId: pairing.uuid)
-        default: pairingStep = .failed(computerId: pairing.uuid, error: pairing.error ?? "L'appairage a échoué.")
+        default: pairingStep = .failed(computerId: pairing.uuid, error: pairing.error ?? String(localized: "L'appairage a échoué."))
         }
     }
 
@@ -785,8 +786,8 @@ final class MVModel: ObservableObject {
         addingHost = false
         if !result.success {
             addHostError = result.portBlocking
-                ? "PC injoignable : ton réseau semble bloquer la connexion."
-                : "PC introuvable à cette adresse. Vérifie qu'il est allumé et que Sunshine tourne."
+                ? String(localized: "PC injoignable : ton réseau semble bloquer la connexion.")
+                : String(localized: "PC introuvable à cette adresse. Vérifie qu'il est allumé et que Sunshine tourne.")
         }
     }
 
@@ -1009,7 +1010,7 @@ final class MVModel: ObservableObject {
 
     func quitRunningApp(on computer: MVComputer) {
         confirmQuitComputerId = nil
-        status = "Fermeture de l'app en cours sur \(computer.name)…"
+        status = String(localized: "Fermeture de l'app en cours sur \(computer.name)…")
         sendAction?(["action": "quitApp", "uuid": computer.uuid])
     }
 

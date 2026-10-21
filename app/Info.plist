@@ -44,6 +44,8 @@
 		<key>NSAllowsArbitraryLoads</key>
 		<true/>
 	</dict>
+	<key>CFBundleDevelopmentRegion</key>
+	<string>en</string>
 	<key>NSLocalNetworkUsageDescription</key>
 	<string>Moonvibe uses the local network to connect to your gaming PC for streaming.</string>
 	<key>NSAppleEventsUsageDescription</key>

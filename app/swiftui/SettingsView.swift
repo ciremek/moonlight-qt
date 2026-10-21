@@ -11,12 +11,12 @@ enum MVSettingsSection: String, CaseIterable, Identifiable {
 
     var title: String {
         switch self {
-        case .image: return "Image"
-        case .audio: return "Audio"
-        case .input: return "Clavier et souris"
-        case .gamepad: return "Manette"
-        case .network: return "Ordinateurs et réseau"
-        case .advanced: return "Avancé"
+        case .image: return String(localized: "Image")
+        case .audio: return String(localized: "Audio")
+        case .input: return String(localized: "Clavier et souris")
+        case .gamepad: return String(localized: "Manette")
+        case .network: return String(localized: "Ordinateurs et réseau")
+        case .advanced: return String(localized: "Avancé")
         }
     }
 
@@ -46,22 +46,22 @@ enum MVSettingsSection: String, CaseIterable, Identifiable {
     var settingTitles: [String] {
         switch self {
         case .image:
-            return ["Préréglage", "Résolution", "Images par seconde", "Débit vidéo", "Mode d'affichage",
-                    "Synchronisation verticale (V-Sync)", "HDR"]
+            return [String(localized: "Préréglage"), String(localized: "Résolution"), String(localized: "Images par seconde"), String(localized: "Débit vidéo"), String(localized: "Mode d'affichage"),
+                    String(localized: "Synchronisation verticale (V-Sync)"), String(localized: "HDR")]
         case .audio:
-            return ["Configuration audio", "Couper le son du PC", "Couper le son en arrière-plan"]
+            return [String(localized: "Configuration audio"), String(localized: "Couper le son du PC"), String(localized: "Couper le son en arrière-plan")]
         case .input:
-            return ["Souris pour bureau à distance", "Inverser les clics gauche et droit",
-                    "Inverser le défilement", "Capturer les raccourcis système"]
+            return [String(localized: "Souris pour bureau à distance"), String(localized: "Inverser les clics gauche et droit"),
+                    String(localized: "Inverser le défilement"), String(localized: "Capturer les raccourcis système")]
         case .gamepad:
-            return ["Plusieurs manettes", "Manettes en arrière-plan", "Souris à la manette", "Inverser A/B et X/Y"]
+            return [String(localized: "Plusieurs manettes"), String(localized: "Manettes en arrière-plan"), String(localized: "Souris à la manette"), String(localized: "Inverser A/B et X/Y")]
         case .network:
-            return ["Trouver les PC automatiquement", "Détecter les blocages réseau", "Couper l'AWDL",
-                    "Quitter l'app à la fin du stream"]
+            return [String(localized: "Trouver les PC automatiquement"), String(localized: "Détecter les blocages réseau"), String(localized: "Couper l'AWDL"),
+                    String(localized: "Quitter l'app à la fin du stream")]
         case .advanced:
-            return ["Codec vidéo", "YUV 4:4:4", "Décodeur vidéo", "Moteur de rendu", "Débloquer le débit",
-                    "Optimiser les réglages des jeux", "Garder l'écran allumé", "Afficher les stats au démarrage", "Avertissements de connexion",
-                    "Avertissements de configuration", "Statut Discord"]
+            return [String(localized: "Codec vidéo"), String(localized: "YUV 4:4:4"), String(localized: "Décodeur vidéo"), String(localized: "Moteur de rendu"), String(localized: "Débloquer le débit"),
+                    String(localized: "Optimiser les réglages des jeux"), String(localized: "Garder l'écran allumé"), String(localized: "Afficher les stats au démarrage"), String(localized: "Avertissements de connexion"),
+                    String(localized: "Avertissements de configuration"), String(localized: "Statut Discord")]
         }
     }
 }
@@ -86,7 +86,7 @@ final class MVSettingsWindowController: NSObject, NSWindowDelegate {
                           styleMask: [.titled, .closable, .miniaturizable, .resizable, .fullSizeContentView],
                           backing: .buffered, defer: false)
         super.init()
-        window.title = "Réglages"
+        window.title = String(localized: "Réglages")
         window.isReleasedWhenClosed = false
         window.toolbarStyle = .unified
         // Same as the main window: SwiftUI's split view sizes must not drive the window's layout pass
@@ -154,7 +154,7 @@ struct MVSettingsView: View {
                     }
                 }
             }
-            .navigationTitle(state.search.isEmpty ? (state.section ?? .image).title : "Recherche")
+            .navigationTitle(state.search.isEmpty ? (state.section ?? .image).title : String(localized: "Recherche"))
         }
         .background {
             Group {
@@ -236,8 +236,8 @@ extension MVModel {
 
 /// A switch with a title, and its explanation in the tooltip.
 struct MVSettingToggle: View {
-    let title: String
-    var help: String?
+    let title: LocalizedStringKey
+    var help: LocalizedStringKey?
     @Binding var isOn: Bool
 
     var body: some View {
@@ -285,17 +285,17 @@ struct MVResolutionPicker: View {
         let (width, height) = model.display.resolution(for: choice.mode, prefs: model.prefs)
         let size = "\(width)×\(height)"
         switch choice.mode {
-        case .native: return "Natif · \(size)"
-        case .safeArea: return "Natif sans encoche · \(size)"
-        case .scaled75: return "75 % · \(size)"
-        case .scaled50: return "50 % · \(size)"
+        case .native: return String(localized: "Natif · \(size)")
+        case .safeArea: return String(localized: "Natif sans encoche · \(size)")
+        case .scaled75: return String(localized: "75 % · \(size)")
+        case .scaled50: return String(localized: "50 % · \(size)")
         case .fixed:
             switch (choice.width, choice.height) {
             case (1280, 720): return "720p · 1280×720"
             case (1920, 1080): return "1080p · 1920×1080"
             case (2560, 1440): return "1440p · 2560×1440"
             case (3840, 2160): return "4K · 3840×2160"
-            default: return "Perso · \(choice.width)×\(choice.height)"
+            default: return String(localized: "Perso · \(choice.width)×\(choice.height)")
             }
         }
     }

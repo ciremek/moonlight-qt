@@ -612,6 +612,14 @@ macx {
     SWIFTUI_BUNDLE.files = $$SWIFTUI_DYLIB
     SWIFTUI_BUNDLE.path = Contents/Frameworks
     QMAKE_BUNDLE_DATA += SWIFTUI_BUNDLE
+
+    # The shell's translations: the code's text is French, en.lproj translates it.
+    # fr.lproj must exist for macOS to pick French on a French Mac.
+    SWIFTUI_EN.files = $$files($$PWD/swiftui/Localization/en.lproj/*.strings)
+    SWIFTUI_EN.path = Contents/Resources/en.lproj
+    SWIFTUI_FR.files = $$files($$PWD/swiftui/Localization/fr.lproj/*.strings)
+    SWIFTUI_FR.path = Contents/Resources/fr.lproj
+    QMAKE_BUNDLE_DATA += SWIFTUI_EN SWIFTUI_FR
     QMAKE_RPATHDIR += @executable_path/../Frameworks
 }
 
