@@ -2,6 +2,19 @@
 
 Moonvibe versions, newest first. Each one builds on [Moonlight PC](https://github.com/moonlight-stream/moonlight-qt) 6.2.
 
+## 0.4.0 · Make it yours · October 21, 2026
+
+### New
+- **In English**: the interface follows the Mac's language, French or English.
+- **PC settings** (right-click a PC): rename it, see its detected addresses, and add several of your own, like Tailscale and WireGuard side by side, each with a test that checks the right PC answers. The wake options moved here.
+- **App settings** (right-click an app): a tile icon and color, a quality of its own, and Mac apps to open when its stream starts and quit when it ends.
+- Apps that restart themselves with admin rights, like VirtualHere, are quit too.
+
+### Improved
+- A quieter interface: settings explanations moved into tooltips, repeated subtitles are gone.
+- Dark mode: red and indigo text and outlines, and the "running" badge, now reach at least 5:1 contrast.
+- VoiceOver: app tiles launch from VoiceOver, unnamed controls got names, nothing reads twice.
+
 ## 0.3.0 · Wake & Go · October 18, 2026
 
 ### New
