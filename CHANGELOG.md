@@ -2,6 +2,16 @@
 
 Moonvibe versions, newest first. Each one builds on [Moonlight PC](https://github.com/moonlight-stream/moonlight-qt) 6.2.
 
+## 0.5.1 · Stardust · October 21, 2026
+
+### New
+- **Launches burst into stars**: when a stream starts, its tile throws out stars, moons and sparkles in its color.
+- **Wake & Go comes alive**: radio waves sweep each time a magic packet goes out, the PC's dot ripples in the sidebar and pops green when it answers, then the tiles light back up one after the other.
+
+### Improved
+- The selection outline glides from tile to tile, banners slide in and out, switching PCs fades, and a tile presses in when you launch it.
+- With Reduce Motion on, movements turn into fades.
+
 ## 0.5.0 · Always up to date · October 21, 2026
 
 ### New

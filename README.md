@@ -29,6 +29,7 @@ Everything Moonlight does is still there (HEVC and AV1, HDR, 7.1 audio, gamepads
 - **In-stream panels**: a bar with the PC and the app, a live stats card, and a shortcut reminder while the mouse is captured.
 - **Quality presets** Fluide (smooth), Équilibré (balanced), Max and Perso (custom), matched to your display's resolution and refresh rate.
 - **Keyboard shortcuts**: <kbd>⌘K</kbd> to search, <kbd>⌘1</kbd> to <kbd>⌘3</kbd> to launch the first apps, <kbd>⌘,</kbd> for settings.
+- **Motion that tells you what's happening**: waking a PC shows each magic packet going out and lights the tiles back up when it answers, and a launch bursts into stars. Reduce Motion is honored.
 - **In English and French**, following your Mac's language. Light and dark appearances, VoiceOver labels.
 - **Runs alongside the official Moonlight**: separate settings, paired PCs and icon.
 
