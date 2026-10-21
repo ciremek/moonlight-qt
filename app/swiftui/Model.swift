@@ -244,7 +244,7 @@ struct MVAddHostResult: Decodable {
     let portBlocking: Bool
 }
 
-struct MVAppRef: Equatable {
+struct MVAppRef: Hashable {
     let computerId: String
     let appId: Int
 }
@@ -439,6 +439,14 @@ final class MVModel: ObservableObject {
     @Published private(set) var wakeOptions: [String: MVWakeOptions] = [:]
     /// PCs being woken, or that didn't wake, by computer id.
     @Published private(set) var wakeStates: [String: MVWakeState] = [:]
+    /// Magic packets sent so far, by computer id: each one sets off a wave in the UI.
+    @Published private(set) var wakePackets: [String: Int] = [:]
+    /// Launch requests so far, by app: the tile acknowledges each one.
+    @Published private(set) var launchRequests: [MVAppRef: Int] = [:]
+    /// The app the last launch was for; it's starting while `busy` is set.
+    @Published private(set) var launchingApp: MVAppRef?
+    /// Launches actually started, by app: each one bursts out of its tile.
+    @Published private(set) var launchStarts: [MVAppRef: Int] = [:]
     /// Computer whose settings sheet is open.
     @Published var computerSettingsId: String?
     /// App whose settings sheet is open.
@@ -697,6 +705,9 @@ final class MVModel: ObservableObject {
         }
         busy = true
         cancellable = true
+        let ref = MVAppRef(computerId: computer.id, appId: app.id)
+        launchingApp = ref
+        launchStarts[ref, default: 0] += 1
         status = String(localized: "Connexion à \(computer.name)…")
         rememberRecent(app, on: computer)
 
@@ -727,9 +738,11 @@ final class MVModel: ObservableObject {
     /// refuses to start a second one.
     func requestLaunch(_ app: MVApp, on computer: MVComputer) {
         // Wake & Go: wake the PC, and launch the app as soon as it answers
+        let ref = MVAppRef(computerId: computer.id, appId: app.id)
         if !computer.online {
             if canWakeAndLaunch(on: computer) {
                 selectedAppId = app.id
+                launchRequests[ref, default: 0] += 1
                 wake(computer, thenLaunch: app)
             }
             return
@@ -738,8 +751,12 @@ final class MVModel: ObservableObject {
             selectedComputerId = computer.id
             selectedAppId = app.id
             confirmQuitComputerId = nil
-            confirmSwitch = MVAppRef(computerId: computer.id, appId: app.id)
+            confirmSwitch = ref
+            launchRequests[ref, default: 0] += 1
             return
+        }
+        if canLaunch(on: computer) {
+            launchRequests[ref, default: 0] += 1
         }
         launch(app, on: computer)
     }
@@ -979,6 +996,7 @@ final class MVModel: ObservableObject {
     }
 
     private func sendWakePacket(to computerId: String) {
+        wakePackets[computerId, default: 0] += 1
         var action: [String: Any] = ["action": "wake", "uuid": computerId]
         let options = wakeOptions[computerId] ?? MVWakeOptions()
         if let mac = MVWakeOptions.normalizedMac(options.mac) {

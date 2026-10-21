@@ -115,12 +115,15 @@ struct MVRootView: View {
 struct MVSidebar: View {
     @ObservedObject var model: MVModel
     var searchFocused: FocusState<Bool>.Binding
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
         List(selection: $model.selectedComputerId) {
             Section("Ordinateurs") {
                 ForEach(model.filteredComputers) { computer in
-                    MVComputerRow(computer: computer, waking: model.isWaking(computer))
+                    MVComputerRow(computer: computer,
+                                  waking: model.isWaking(computer),
+                                  wakePackets: model.wakePackets[computer.id] ?? 0)
                         .tag(computer.id)
                         .contextMenu {
                             Button("Réglages \(mvOf(computer.name))…") { model.computerSettingsId = computer.id }
@@ -169,18 +172,8 @@ struct MVSidebar: View {
         .safeAreaInset(edge: .bottom) {
             VStack(alignment: .leading, spacing: 10) {
                 if let version = model.availableUpdate {
-                    Button {
-                        model.updater?.checkForUpdates()
-                    } label: {
-                        Label("Moonvibe \(version) est disponible", systemImage: "arrow.down.circle.fill")
-                            .font(.system(size: 12, weight: .semibold))
-                            .foregroundStyle(mvAccentForeground)
-                            .padding(.horizontal, 10)
-                            .padding(.vertical, 6)
-                            .background(Capsule().fill(mvAccent.opacity(0.12)))
-                    }
-                    .buttonStyle(.plain)
-                    .help("Voir les nouveautés et installer")
+                    MVUpdateBadge(version: version) { model.updater?.checkForUpdates() }
+                        .transition(reduceMotion ? .opacity : .move(edge: .bottom).combined(with: .opacity))
                 }
                 HStack {
                     Button {
@@ -195,6 +188,7 @@ struct MVSidebar: View {
             .font(.system(size: 13))
             .padding(.horizontal, 16)
             .padding(.vertical, 12)
+            .animation(.mvState, value: model.availableUpdate)
         }
     }
 }
@@ -228,6 +222,7 @@ struct MVSearchField: View {
 struct MVComputerRow: View {
     let computer: MVComputer
     let waking: Bool
+    let wakePackets: Int
 
     private var stateText: String {
         if computer.online { return computer.paired ? String(localized: "En ligne") : String(localized: "Non appairé") }
@@ -242,14 +237,15 @@ struct MVComputerRow: View {
                 Text(stateText)
                     .font(.system(size: 11))
                     .foregroundStyle(.secondary)
+                    .contentTransition(.opacity)
             }
             Spacer()
-            Circle()
-                .fill(computer.online ? mvOnline : waking ? Color.orange : Color.secondary.opacity(0.35))
-                .frame(width: 8, height: 8)
-                .accessibilityHidden(true)
+            MVStatusDot(color: computer.online ? mvOnline : waking ? Color.orange : Color.secondary.opacity(0.35),
+                        packets: wakePackets,
+                        online: computer.online)
         }
         .padding(.vertical, 2)
+        .animation(.mvState, value: stateText)
     }
 }
 
@@ -289,7 +285,10 @@ struct MVDetail: View {
     var body: some View {
         Group {
             if let computer = model.selectedComputer {
+                // A view of its own per PC, so switching PCs fades instead of morphing tiles
                 MVComputerHome(model: model, computer: computer)
+                    .id(computer.id)
+                    .transition(.opacity)
             } else {
                 ContentUnavailableView {
                     Label("Aucun ordinateur", systemImage: "desktopcomputer")
@@ -300,6 +299,7 @@ struct MVDetail: View {
                 }
             }
         }
+        .animation(.easeOut(duration: 0.2), value: model.selectedComputerId)
     }
 }
 
@@ -308,19 +308,34 @@ struct MVComputerHome: View {
     let computer: MVComputer
     @FocusState private var gridFocused: Bool
     @State private var confirmDelete = false
+    @Namespace private var selectionRing
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     private let tileMinWidth: CGFloat = 140
     private let spacing: CGFloat = 18
 
+    /// Which banner shows, if any: it slides in and out when this changes.
+    private var bannerKind: Int {
+        if !computer.online || !computer.paired { return 1 }
+        return computer.runningApp != nil ? 2 : 0
+    }
+
+    private var bannerTransition: AnyTransition {
+        reduceMotion ? .opacity : .asymmetric(insertion: .opacity.combined(with: .offset(y: -10)), removal: .opacity)
+    }
+
     var body: some View {
         let apps = model.visibleApps(of: computer)
         let selected = model.selectedApp(of: computer)
+        let launchingAfterWake = model.appLaunchingAfterWake(on: computer)
 
         VStack(spacing: 0) {
             if !computer.online || !computer.paired {
                 MVComputerBanner(model: model, computer: computer)
+                    .transition(bannerTransition)
             } else if let running = computer.runningApp {
                 MVRunningBanner(model: model, computer: computer, app: running)
+                    .transition(bannerTransition)
             }
 
             GeometryReader { geometry in
@@ -329,13 +344,21 @@ struct MVComputerHome: View {
                     VStack(alignment: .leading, spacing: 12) {
                         LazyVGrid(columns: [GridItem(.adaptive(minimum: tileMinWidth, maximum: 180), spacing: spacing)],
                                   alignment: .leading, spacing: spacing) {
-                            ForEach(apps) { app in
+                            ForEach(Array(apps.enumerated()), id: \.element.id) { index, app in
+                                let ref = MVAppRef(computerId: computer.id, appId: app.id)
                                 MVAppTile(app: app,
                                           settings: model.settings(of: app, on: computer),
                                           selected: app.id == selected?.id && gridFocused,
                                           highlighted: app.id == selected?.id,
                                           running: app.id == computer.runningAppId,
-                                          enabled: computer.online && computer.paired)
+                                          enabled: computer.online && computer.paired,
+                                          launching: (model.busy && model.launchingApp == ref) || launchingAfterWake?.id == app.id,
+                                          launchRequests: model.launchRequests[ref] ?? 0,
+                                          launchStarts: model.launchStarts[ref] ?? 0,
+                                          wakeDelay: mvWaveDelay(index: index, reduceMotion: reduceMotion),
+                                          selectionRing: selectionRing)
+                                    // The launched tile is the selected one: its sparks go over the others
+                                    .zIndex(app.id == selected?.id ? 1 : 0)
                                     .onTapGesture(count: 2) { model.requestLaunch(app, on: computer) }
                                     .simultaneousGesture(TapGesture().onEnded {
                                         model.selectedAppId = app.id
@@ -354,6 +377,7 @@ struct MVComputerHome: View {
                                     .accessibilityHint(computer.online ? "Lance l'app" : "Réveille le PC, puis lance l'app")
                             }
                         }
+                        .animation(reduceMotion ? .easeInOut(duration: 0.15) : .mvGlide, value: selected?.id)
                     }
                     .padding(24)
                 }
@@ -374,6 +398,7 @@ struct MVComputerHome: View {
 
             MVLaunchBar(model: model, computer: computer, app: selected)
         }
+        .animation(.mvState, value: bannerKind)
         .navigationTitle(computer.name)
         .toolbar {
             ToolbarItem(placement: .primaryAction) {
@@ -419,6 +444,7 @@ struct MVComputerHome: View {
 struct MVComputerBanner: View {
     @ObservedObject var model: MVModel
     let computer: MVComputer
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
         HStack(spacing: 12) {
@@ -432,17 +458,19 @@ struct MVComputerBanner: View {
             } else {
                 switch model.wakeStates[computer.id] {
                 case .waking(let since):
-                    ProgressView().controlSize(.small).frame(width: 22)
-                        .accessibilityHidden(true)
+                    MVWakeWaves(packets: model.wakePackets[computer.id] ?? 0)
                     message("Réveil \(mvOf(computer.name))…",
                             model.appLaunchingAfterWake(on: computer).map { app -> LocalizedStringKey in
                                 "\(app.name) se lance dès qu'il répond."
                             })
                     Spacer(minLength: 8)
                     TimelineView(.periodic(from: since, by: 1)) { context in
-                        Text(Duration.seconds(context.date.timeIntervalSince(since)).formatted(.time(pattern: .minuteSecond)))
+                        let seconds = Int(context.date.timeIntervalSince(since))
+                        Text(Duration.seconds(seconds).formatted(.time(pattern: .minuteSecond)))
                             .font(.system(size: 12).monospacedDigit())
                             .foregroundStyle(.secondary)
+                            .contentTransition(.numericText())
+                            .animation(reduceMotion ? nil : .snappy, value: seconds)
                     }
                     .accessibilityHidden(true)
                     Button("Annuler") { model.cancelWake(computer) }
@@ -488,6 +516,7 @@ struct MVComputerBanner: View {
         .padding(.horizontal, 24)
         .padding(.vertical, 12)
         .background(.quaternary.opacity(0.4))
+        .animation(.mvState, value: model.wakeStates[computer.id])
     }
 
     private func icon(_ name: String, color: Color = .secondary) -> some View {
@@ -582,6 +611,17 @@ struct MVAppTile: View {
     let highlighted: Bool
     let running: Bool
     let enabled: Bool
+    /// Its stream is starting, or waits for the PC to wake up.
+    var launching = false
+    /// Launch requests so far: the tile presses in and springs back for each new one.
+    var launchRequests = 0
+    /// Launches started so far: each one bursts out of the tile.
+    var launchStarts = 0
+    /// When the PC answers, tiles light up one after the other.
+    var wakeDelay = 0.0
+    /// Shared by the grid's tiles; nil for a tile shown alone.
+    var selectionRing: Namespace.ID?
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
@@ -593,9 +633,9 @@ struct MVAppTile: View {
                     .overlay { artwork }
                     .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
                     .overlay {
-                        RoundedRectangle(cornerRadius: 20, style: .continuous)
-                            .strokeBorder(highlighted ? mvAccentForeground : .clear, lineWidth: 3)
-                            .opacity(selected ? 1 : 0.55)
+                        if highlighted {
+                            ring
+                        }
                     }
 
                 if !running, settings.preset != nil || !settings.openApps.isEmpty {
@@ -621,15 +661,49 @@ struct MVAppTile: View {
                         .padding(.vertical, 3)
                         .background(Capsule().fill(mvRunningFill))
                         .padding(10)
+                        .transition(reduceMotion ? .opacity : .scale(scale: 0.6, anchor: .topTrailing).combined(with: .opacity))
                 }
             }
             Text(app.name).font(.system(size: 13, weight: .semibold)).lineLimit(1)
         }
+        .animation(.mvState, value: running)
+        .keyframeAnimator(initialValue: 1.0, trigger: launchRequests) { [reduceMotion] tile, scale in
+            // Pressed in, then back: a dip in opacity says the same without motion
+            let pressed = max(0, (1 - scale) / 0.06)
+            tile.scaleEffect(reduceMotion ? 1 : scale)
+                .opacity(reduceMotion ? 1 - 0.4 * pressed : 1)
+        } keyframes: { _ in
+            KeyframeTrack {
+                CubicKeyframe(0.94, duration: 0.09)
+                SpringKeyframe(1.0, duration: 0.4, spring: .snappy(extraBounce: 0.15))
+            }
+        }
+        .overlay {
+            // Larger than the tile, so the sparks fly over its neighbors
+            MVLaunchBurst(trigger: launchStarts, color: settings.color?.color ?? mvAccent)
+                .frame(width: 440, height: 440)
+        }
+        // Asleep, the tiles sink back and lose their color
         .saturation(enabled ? 1 : 0)
         .opacity(enabled ? 1 : 0.55)
+        .scaleEffect(enabled || reduceMotion ? 1 : 0.97)
+        .animation(.smooth(duration: 0.5).delay(wakeDelay), value: enabled)
         .contentShape(Rectangle())
         .accessibilityElement(children: .combine)
         .accessibilityAddTraits(highlighted ? .isSelected : [])
+    }
+
+    /// The selection outline, which glides from tile to tile.
+    @ViewBuilder
+    private var ring: some View {
+        let outline = RoundedRectangle(cornerRadius: 20, style: .continuous)
+            .strokeBorder(mvAccentForeground, lineWidth: 3)
+            .opacity(selected ? 1 : 0.55)
+        if let selectionRing, !reduceMotion {
+            outline.matchedGeometryEffect(id: "selection", in: selectionRing)
+        } else {
+            outline
+        }
     }
 
     // Icon + tint, as in the design. Sunshine's box art is portrait poster art that
@@ -638,6 +712,7 @@ struct MVAppTile: View {
         Image(systemName: settings.symbol ?? app.symbolName)
             .font(.system(size: 30, weight: .regular))
             .foregroundStyle(settings.color.map { AnyShapeStyle($0.color) } ?? AnyShapeStyle(.primary.opacity(0.75)))
+            .symbolEffect(.pulse, options: .repeating, isActive: launching)
     }
 }
 
@@ -685,6 +760,8 @@ struct MVLaunchBar: View {
                 .font(.system(size: 12))
                 .foregroundStyle(.secondary)
                 .lineLimit(2)
+                .contentTransition(.opacity)
+                .animation(.mvState, value: model.status)
 
             Spacer(minLength: 0)
         }
