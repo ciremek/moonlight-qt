@@ -2,6 +2,17 @@
 
 Moonvibe versions, newest first. Each one builds on [Moonlight PC](https://github.com/moonlight-stream/moonlight-qt) 6.2.
 
+## 0.5.2 · Every detail · October 21, 2026
+
+### New
+- **Live latency trace** in the connection test: one bar per measure as it comes in, red for a lost one, so the variation shows at a glance.
+- **Pairing celebrates**: once a PC is paired, the check draws itself and stars burst out behind it.
+
+### Improved
+- Pairing steps slide in, the PIN digits drop into place, and the search shows the same radio waves as a PC waking up.
+- Address tests pop their result, and the app settings' icon and color highlights glide to your pick.
+- The quality popover's highlight glides between presets, and the toolbar button rolls its numbers.
+
 ## 0.5.1 · Stardust · October 21, 2026
 
 ### New
