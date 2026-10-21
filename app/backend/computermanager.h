@@ -242,6 +242,10 @@ public:
 
     void renameHost(NvComputer* computer, QString name);
 
+    // Replaces the addresses added by hand: the first one is the manual address,
+    // the others go to extraAddresses
+    void setUserAddresses(NvComputer* computer, QVector<NvAddress> addresses);
+
     void clientSideAttributeUpdated(NvComputer* computer);
 
 signals:

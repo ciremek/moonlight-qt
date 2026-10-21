@@ -3,6 +3,7 @@
 #include "moonvibeui.h"
 
 #include "backend/computermanager.h"
+#include "backend/nvhttp.h"
 #include "settings/streamingpreferences.h"
 #include "streaming/awdl.h"
 #include "streaming/session.h"
@@ -13,6 +14,7 @@
 #include <QJsonDocument>
 #include <QThreadPool>
 #include <QTimer>
+#include <QUrl>
 
 #include <memory>
 #include <type_traits>
@@ -22,6 +24,21 @@ SwiftUIShell* SwiftUIShell::s_Instance = nullptr;
 static QByteArray toJson(const QJsonObject& object)
 {
     return QJsonDocument(object).toJson(QJsonDocument::Compact);
+}
+
+// An address typed by the user ("host", "host:port", "[ipv6]:port"), read the way
+// ComputerManager::addNewHostManually() does. Null when it isn't one.
+static NvAddress parseUserAddress(const QString& text)
+{
+    QString trimmed = text.trimmed();
+    QUrl url = QUrl::fromUserInput("moonlight://" + trimmed);
+    if (url.isValid() && !url.host().isEmpty() && url.scheme() == "moonlight") {
+        return NvAddress(url.host(), url.port(DEFAULT_HTTP_PORT));
+    }
+    if (QHostAddress(trimmed).protocol() == QAbstractSocket::IPv6Protocol) {
+        return NvAddress(trimmed, DEFAULT_HTTP_PORT);
+    }
+    return NvAddress();
 }
 
 SwiftUIShell::SwiftUIShell(ComputerManager* computerManager, QObject* parent)
@@ -116,6 +133,27 @@ void SwiftUIShell::pushComputers()
                 { "mac", QString::fromLatin1(computer->macAddress.toHex(':').toUpper()) },
                 { "runningAppId", computer->currentGameId },
             };
+
+            // Detected addresses first, then the ones added by hand
+            QJsonArray addresses;
+            auto addAddress = [&](const NvAddress& address, const char* kind) {
+                if (!address.isNull()) {
+                    addresses.append(QJsonObject {
+                        { "address", address.address() },
+                        { "port", address.port() },
+                        { "kind", kind },
+                        { "active", online && address == computer->activeAddress },
+                    });
+                }
+            };
+            addAddress(computer->localAddress, "local");
+            addAddress(computer->remoteAddress, "remote");
+            addAddress(computer->ipv6Address, "ipv6");
+            addAddress(computer->manualAddress, "manual");
+            for (const NvAddress& address : std::as_const(computer->extraAddresses)) {
+                addAddress(address, "manual");
+            }
+            entry.insert("addresses", addresses);
         }
 
         // No box art: the tiles show an icon, so there's nothing to download
@@ -308,6 +346,19 @@ void SwiftUIShell::dispatch(const QJsonObject& action)
     else if (type == "wake") {
         wake(action);
     }
+    else if (type == "rename") {
+        NvComputer* computer = findComputer(action["uuid"].toString());
+        QString name = action["name"].toString().trimmed();
+        if (computer != nullptr && !name.isEmpty()) {
+            m_ComputerManager->renameHost(computer, name);
+        }
+    }
+    else if (type == "setAddresses") {
+        setUserAddresses(action["uuid"].toString(), action["addresses"].toArray());
+    }
+    else if (type == "testAddress") {
+        testAddress(action["uuid"].toString(), action["address"].toString());
+    }
     else if (type == "quitApp") {
         NvComputer* computer = findComputer(action["uuid"].toString());
         if (computer != nullptr) {
@@ -384,6 +435,63 @@ void SwiftUIShell::wake(const QJsonObject& action)
                 { "sent", sent },
             }).constData());
         }, Qt::QueuedConnection);
+    });
+}
+
+void SwiftUIShell::setUserAddresses(const QString& computerUuid, const QJsonArray& texts)
+{
+    NvComputer* computer = findComputer(computerUuid);
+    if (computer == nullptr) {
+        return;
+    }
+
+    QVector<NvAddress> addresses;
+    for (const QJsonValue& text : texts) {
+        NvAddress address = parseUserAddress(text.toString());
+        if (!address.isNull() && !addresses.contains(address)) {
+            addresses.append(address);
+        }
+    }
+    m_ComputerManager->setUserAddresses(computer, addresses);
+}
+
+void SwiftUIShell::testAddress(const QString& computerUuid, const QString& text)
+{
+    auto report = [this, computerUuid, text](const QString& result) {
+        mv_ui_address_test_result(toJson(QJsonObject {
+            { "uuid", computerUuid },
+            { "address", text },
+            { "result", result },
+        }).constData());
+    };
+
+    NvComputer* computer = findComputer(computerUuid);
+    NvAddress address = parseUserAddress(text);
+    if (computer == nullptr || address.isNull()) {
+        report(QStringLiteral("invalid"));
+        return;
+    }
+
+    QSslCertificate serverCert;
+    bool useTrueUid;
+    {
+        QReadLocker lock(&computer->lock);
+        serverCert = computer->serverCert;
+        useTrueUid = !computer->isNvidiaServerSoftware;
+    }
+
+    // Same check as polling: the address must answer, and with this PC's ID
+    QThreadPool::globalInstance()->start([this, computerUuid, address, serverCert, useTrueUid, report] {
+        QString result;
+        try {
+            NvHTTP http(address, 0, serverCert, useTrueUid);
+            QString serverInfo = http.getServerInfo(NvHTTP::NVLL_NONE, true);
+            result = NvHTTP::getXmlString(serverInfo, "uniqueid").compare(computerUuid, Qt::CaseInsensitive) == 0
+                    ? QStringLiteral("ok") : QStringLiteral("other");
+        } catch (...) {
+            result = QStringLiteral("unreachable");
+        }
+        QMetaObject::invokeMethod(this, [report, result] { report(result); }, Qt::QueuedConnection);
     });
 }
 

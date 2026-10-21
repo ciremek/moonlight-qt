@@ -30,6 +30,8 @@ struct MVComputer: Decodable, Identifiable, Hashable {
     let mac: String
     let runningAppId: Int
     let apps: [MVApp]
+    /// Detected addresses first, then the ones added by hand.
+    let addresses: [MVAddress]
 
     var id: String { uuid }
 
@@ -247,6 +249,52 @@ struct MVAppRef: Equatable {
     let appId: Int
 }
 
+// MARK: - Addresses
+
+/// One address Moonvibe knows for a PC.
+struct MVAddress: Decodable, Hashable {
+    let address: String
+    let port: Int
+    /// "local", "remote" and "ipv6" are detected; "manual" ones were added by hand.
+    let kind: String
+    /// The address the PC answers on right now.
+    let active: Bool
+
+    static let defaultPort = 47989
+
+    /// As the user would type it: the port only when it isn't Sunshine's default.
+    var text: String {
+        guard port != Self.defaultPort else { return address }
+        return address.contains(":") ? "[\(address)]:\(port)" : "\(address):\(port)"
+    }
+
+    var kindLabel: String {
+        switch kind {
+        case "local": return "Réseau local"
+        case "remote": return "IP publique"
+        case "ipv6": return "IPv6"
+        default: return MVAddress.autoLabel(for: text) ?? "Ajoutée"
+        }
+    }
+
+    /// "Tailscale" for its 100.64.0.0/10 addresses.
+    static func autoLabel(for text: String) -> String? {
+        let octets = text.split(separator: ":").first?.split(separator: ".").compactMap { Int($0) } ?? []
+        guard octets.count == 4, octets[0] == 100, (64...127).contains(octets[1]) else { return nil }
+        return "Tailscale"
+    }
+}
+
+enum MVAddressTest: Equatable {
+    case testing, ok, otherComputer, unreachable, invalid
+}
+
+struct MVAddressTestResult: Decodable {
+    let uuid: String
+    let address: String
+    let result: String
+}
+
 // MARK: - Wake-on-LAN
 
 /// Moonvibe's own wake settings for a PC, on top of what the PC reports.
@@ -337,8 +385,12 @@ final class MVModel: ObservableObject {
     @Published private(set) var wakeOptions: [String: MVWakeOptions] = [:]
     /// PCs being woken, or that didn't wake, by computer id.
     @Published private(set) var wakeStates: [String: MVWakeState] = [:]
-    /// Computer whose wake options sheet is open.
-    @Published var wakeOptionsComputerId: String?
+    /// Computer whose settings sheet is open.
+    @Published var computerSettingsId: String?
+    /// Labels given to added addresses, by computer id then address.
+    @Published private(set) var addressLabels: [String: [String: String]] = [:]
+    /// Address checks, by computer id then address as typed.
+    @Published private(set) var addressTests: [String: [String: MVAddressTest]] = [:]
     /// App to launch once a waking PC answers, by computer id.
     private var launchAfterWake: [String: Int] = [:]
     private var wakeTasks: [String: Task<Void, Never>] = [:]
@@ -354,6 +406,7 @@ final class MVModel: ObservableObject {
 
     private static let recentsKey = "MoonvibeRecents"
     private static let wakeOptionsKey = "MoonvibeWakeOptions"
+    private static let addressLabelsKey = "MoonvibeAddressLabels"
 
     init() {
         if let data = UserDefaults.standard.data(forKey: Self.recentsKey),
@@ -363,6 +416,10 @@ final class MVModel: ObservableObject {
         if let data = UserDefaults.standard.data(forKey: Self.wakeOptionsKey),
            let decoded = try? JSONDecoder().decode([String: MVWakeOptions].self, from: data) {
             wakeOptions = decoded
+        }
+        if let data = UserDefaults.standard.data(forKey: Self.addressLabelsKey),
+           let decoded = try? JSONDecoder().decode([String: [String: String]].self, from: data) {
+            addressLabels = decoded
         }
     }
 
@@ -681,12 +738,62 @@ final class MVModel: ObservableObject {
         }
         stopWaking(computer.id)
         setWakeOptions(MVWakeOptions(), for: computer)
+        setAddressLabels([:], for: computer)
         sendAction?(["action": "deleteHost", "uuid": computer.uuid])
     }
 
     func cancelLaunch() {
         guard busy, cancellable else { return }
         sendAction?(["action": "cancel"])
+    }
+
+    // MARK: Computer settings
+
+    func rename(_ computer: MVComputer, to name: String) {
+        let trimmed = name.trimmingCharacters(in: .whitespaces)
+        guard !trimmed.isEmpty, trimmed != computer.name else { return }
+        sendAction?(["action": "rename", "uuid": computer.uuid, "name": trimmed])
+    }
+
+    /// Replaces the addresses added by hand. The host normalizes them and drops invalid ones.
+    func setUserAddresses(_ texts: [String], for computer: MVComputer) {
+        sendAction?(["action": "setAddresses", "uuid": computer.uuid, "addresses": texts])
+    }
+
+    func addressLabel(_ text: String, of computer: MVComputer) -> String? {
+        addressLabels[computer.id]?[text]
+    }
+
+    /// Keeps the labels of the given addresses only, dropping empty ones.
+    func setAddressLabels(_ labels: [String: String], for computer: MVComputer) {
+        let kept = labels.filter { !$0.value.trimmingCharacters(in: .whitespaces).isEmpty }
+        addressLabels[computer.id] = kept.isEmpty ? nil : kept
+        if let data = try? JSONEncoder().encode(addressLabels) {
+            UserDefaults.standard.set(data, forKey: Self.addressLabelsKey)
+        }
+    }
+
+    /// Checks that an address answers with this PC's ID.
+    func testAddress(_ text: String, on computer: MVComputer) {
+        let trimmed = text.trimmingCharacters(in: .whitespaces)
+        guard !trimmed.isEmpty else { return }
+        addressTests[computer.id, default: [:]][trimmed] = .testing
+        sendAction?(["action": "testAddress", "uuid": computer.uuid, "address": trimmed])
+    }
+
+    func addressTest(_ text: String, of computer: MVComputer) -> MVAddressTest? {
+        addressTests[computer.id]?[text.trimmingCharacters(in: .whitespaces)]
+    }
+
+    func update(addressTest: MVAddressTestResult) {
+        let result: MVAddressTest
+        switch addressTest.result {
+        case "ok": result = .ok
+        case "other": result = .otherComputer
+        case "unreachable": result = .unreachable
+        default: result = .invalid
+        }
+        addressTests[addressTest.uuid, default: [:]][addressTest.address] = result
     }
 
     // MARK: Wake-on-LAN

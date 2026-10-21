@@ -577,6 +577,19 @@ void ComputerManager::renameHost(NvComputer* computer, QString name)
     handleComputerStateChanged(computer);
 }
 
+void ComputerManager::setUserAddresses(NvComputer* computer, QVector<NvAddress> addresses)
+{
+    {
+        QWriteLocker lock(&computer->lock);
+
+        computer->manualAddress = addresses.isEmpty() ? NvAddress() : addresses.takeFirst();
+        computer->extraAddresses = addresses;
+    }
+
+    // Notify the UI of the state change
+    handleComputerStateChanged(computer);
+}
+
 void ComputerManager::clientSideAttributeUpdated(NvComputer* computer)
 {
     // Notify the UI of the state change

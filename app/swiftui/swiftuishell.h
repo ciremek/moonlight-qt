@@ -39,6 +39,8 @@ private:
     void launch(const QString& computerUuid, int appId, const QPoint& displayOrigin);
     void pair(const QString& computerUuid);
     void wake(const QJsonObject& action);
+    void testAddress(const QString& computerUuid, const QString& text);
+    void setUserAddresses(const QString& computerUuid, const QJsonArray& texts);
     void deleteHost(const QString& computerUuid);
     void applyPrefs(const QJsonObject& prefs);
     void pushPrefs();

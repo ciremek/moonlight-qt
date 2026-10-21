@@ -114,6 +114,8 @@ public:
     NvAddress remoteAddress;
     NvAddress ipv6Address;
     NvAddress manualAddress;
+    // Further addresses added by hand (another VPN, say); polling tries them after the others
+    QVector<NvAddress> extraAddresses;
     QByteArray macAddress;
     QString name;
     bool hasCustomName;

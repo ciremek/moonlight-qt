@@ -80,11 +80,11 @@ struct MVRootView: View {
             MVPairingSheet(model: model)
         }
         .sheet(isPresented: Binding(
-            get: { model.wakeOptionsComputerId != nil },
-            set: { if !$0 { model.wakeOptionsComputerId = nil } }
+            get: { model.computerSettingsId != nil },
+            set: { if !$0 { model.computerSettingsId = nil } }
         )) {
-            if let computer = model.computers.first(where: { $0.id == model.wakeOptionsComputerId }) {
-                MVWakeOptionsSheet(model: model, computer: computer)
+            if let computer = model.computers.first(where: { $0.id == model.computerSettingsId }) {
+                MVComputerSettingsSheet(model: model, computer: computer)
             }
         }
         .alert("Lancement impossible", isPresented: Binding(
@@ -110,6 +110,9 @@ struct MVSidebar: View {
                 ForEach(model.filteredComputers) { computer in
                     MVComputerRow(computer: computer, waking: model.isWaking(computer))
                         .tag(computer.id)
+                        .contextMenu {
+                            Button("Réglages \(mvOf(computer.name))…") { model.computerSettingsId = computer.id }
+                        }
                 }
                 Button {
                     model.openPairing()
@@ -343,7 +346,7 @@ struct MVComputerHome: View {
                 Menu {
                     Button("Réveiller") { model.wake(computer) }
                         .disabled(!model.canWake(computer) || model.isWaking(computer))
-                    Button("Options de réveil…") { model.wakeOptionsComputerId = computer.id }
+                    Button("Réglages \(mvOf(computer.name))…") { model.computerSettingsId = computer.id }
                     if let running = computer.runningApp {
                         Button("Quitter \(running.name)…") { model.confirmQuitComputerId = computer.id }
                     }
@@ -411,7 +414,7 @@ struct MVComputerBanner: View {
                     message("\(computer.name) ne répond pas",
                             "Vérifie le Wake-on-LAN dans son BIOS et son adresse MAC.")
                     Spacer(minLength: 8)
-                    Button("Options de réveil…") { model.wakeOptionsComputerId = computer.id }
+                    Button("Options de réveil…") { model.computerSettingsId = computer.id }
                         .controlSize(.large)
                         .fixedSize()
                     Button("Réessayer") { model.wake(computer) }
@@ -436,7 +439,7 @@ struct MVComputerBanner: View {
                         message("\(computer.name) est hors ligne",
                                 "Ajoute son adresse MAC pour le réveiller à distance.")
                         Spacer(minLength: 8)
-                        Button("Options de réveil…") { model.wakeOptionsComputerId = computer.id }
+                        Button("Options de réveil…") { model.computerSettingsId = computer.id }
                             .controlSize(.large)
                             .fixedSize()
                     }

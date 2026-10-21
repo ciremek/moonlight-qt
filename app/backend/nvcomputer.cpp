@@ -22,6 +22,9 @@
 #define SER_SRVCERT "srvcert"
 #define SER_CUSTOMNAME "customname"
 #define SER_NVIDIASOFTWARE "nvidiasw"
+#define SER_EXTRAADDRS "extraaddresses"
+#define SER_EXTRAADDR "address"
+#define SER_EXTRAPORT "port"
 
 NvComputer::NvComputer(QSettings& settings)
 {
@@ -39,6 +42,14 @@ NvComputer::NvComputer(QSettings& settings)
                                     settings.value(SER_MANUALPORT, QVariant(DEFAULT_HTTP_PORT)).toUInt());
     this->serverCert = QSslCertificate(settings.value(SER_SRVCERT).toByteArray());
     this->isNvidiaServerSoftware = settings.value(SER_NVIDIASOFTWARE).toBool();
+
+    int extraAddressCount = settings.beginReadArray(SER_EXTRAADDRS);
+    for (int i = 0; i < extraAddressCount; i++) {
+        settings.setArrayIndex(i);
+        this->extraAddresses.append(NvAddress(settings.value(SER_EXTRAADDR).toString(),
+                                              settings.value(SER_EXTRAPORT, QVariant(DEFAULT_HTTP_PORT)).toUInt()));
+    }
+    settings.endArray();
 
     int appCount = settings.beginReadArray(SER_APPLIST);
     this->appList.reserve(appCount);
@@ -93,6 +104,15 @@ void NvComputer::serialize(QSettings& settings, bool serializeApps) const
     settings.setValue(SER_SRVCERT, serverCert.toPem());
     settings.setValue(SER_NVIDIASOFTWARE, isNvidiaServerSoftware);
 
+    settings.remove(SER_EXTRAADDRS);
+    settings.beginWriteArray(SER_EXTRAADDRS);
+    for (int i = 0; i < extraAddresses.count(); i++) {
+        settings.setArrayIndex(i);
+        settings.setValue(SER_EXTRAADDR, extraAddresses.at(i).address());
+        settings.setValue(SER_EXTRAPORT, extraAddresses.at(i).port());
+    }
+    settings.endArray();
+
     // Avoid deleting an existing applist if we couldn't get one
     if (!appList.isEmpty() && serializeApps) {
         settings.remove(SER_APPLIST);
@@ -115,6 +135,7 @@ bool NvComputer::isEqualSerialized(const NvComputer &that) const
            this->remoteAddress == that.remoteAddress &&
            this->ipv6Address == that.ipv6Address &&
            this->manualAddress == that.manualAddress &&
+           this->extraAddresses == that.extraAddresses &&
            this->serverCert == that.serverCert &&
            this->isNvidiaServerSoftware == that.isNvidiaServerSoftware &&
            this->appList == that.appList;
@@ -553,6 +574,7 @@ QVector<NvAddress> NvComputer::uniqueAddresses() const
     uniqueAddressList.append(remoteAddress);
     uniqueAddressList.append(ipv6Address);
     uniqueAddressList.append(manualAddress);
+    uniqueAddressList.append(extraAddresses);
 
     // Prune duplicates (always giving precedence to the first)
     for (int i = 0; i < uniqueAddressList.count(); i++) {
