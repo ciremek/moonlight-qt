@@ -18,6 +18,7 @@ struct MVComputerSettingsSheet: View {
     @State private var mac: String
     @State private var wakeAddress: String
     @State private var wakePort: String
+    @StateObject private var tester = MVConnectionTester()
 
     init(model: MVModel, computer: MVComputer) {
         _model = ObservedObject(wrappedValue: model)
@@ -34,6 +35,8 @@ struct MVComputerSettingsSheet: View {
     }
 
     private var detectedAddresses: [MVAddress] { computer.addresses.filter { $0.kind != "manual" } }
+    /// The address the PC answers on, which the connection test measures.
+    private var activeAddress: MVAddress? { computer.addresses.first { $0.active } }
     private var addedTexts: [String] {
         rows.map { $0.text.trimmingCharacters(in: .whitespaces) }.filter { !$0.isEmpty }
     }
@@ -89,6 +92,18 @@ struct MVComputerSettingsSheet: View {
                 }
 
                 Section {
+                    connectionTest
+                } header: {
+                    Text("Connexion")
+                } footer: {
+                    if let address = activeAddress {
+                        Text("Mesure la liaison avec \(address.text) pendant une dizaine de secondes.")
+                    } else {
+                        Text("Le PC doit être en ligne pour tester la connexion.")
+                    }
+                }
+
+                Section {
                     TextField("Adresse MAC", text: $mac, prompt: Text("AA:BB:CC:DD:EE:FF"))
                         .monospaced()
                         .help(computer.mac.isEmpty
@@ -131,7 +146,34 @@ struct MVComputerSettingsSheet: View {
             }
             .padding(16)
         }
-        .frame(width: 540, height: 640)
+        .frame(width: 540, height: 680)
+        .onDisappear { tester.stop() }
+    }
+
+    @ViewBuilder
+    private var connectionTest: some View {
+        if tester.running {
+            HStack(spacing: 12) {
+                ProgressView(value: tester.progress)
+                Button("Arrêter") { tester.stop() }
+            }
+        } else {
+            if let report = tester.report {
+                MVConnectionReportView(report: report)
+            }
+            Button {
+                if let address = activeAddress {
+                    tester.start(host: address.address, port: address.port)
+                }
+            } label: {
+                if tester.report == nil {
+                    Text("Tester la connexion")
+                } else {
+                    Text("Tester à nouveau")
+                }
+            }
+            .disabled(activeAddress == nil)
+        }
     }
 
     @ViewBuilder
@@ -231,5 +273,47 @@ private struct MVAddressTestStatus: View {
         .help(help)
         .accessibilityLabel(help)
         .frame(width: 20)
+    }
+}
+
+/// The outcome of a connection test: a verdict first, then the measures.
+private struct MVConnectionReportView: View {
+    let report: MVConnectionReport
+
+    var body: some View {
+        HStack(spacing: 8) {
+            Circle().fill(color).frame(width: 9, height: 9)
+                .accessibilityHidden(true)
+            Text(verdict).fontWeight(.semibold)
+        }
+        if !report.samples.isEmpty {
+            LabeledContent("Latence", value: milliseconds(report.averageMs))
+            LabeledContent("Variation", value: milliseconds(report.jitterMs))
+                .help("Écart moyen de la latence d'une mesure à l'autre")
+        }
+        LabeledContent("Pertes", value: (report.lossPercent / 100).formatted(.percent.precision(.fractionLength(0))))
+        if let link = report.link {
+            LabeledContent("Liaison de ce Mac", value: link)
+        }
+    }
+
+    private var verdict: LocalizedStringKey {
+        switch report.verdict {
+        case .excellent: return "Excellente pour streamer"
+        case .fair: return "Correcte, quelques saccades possibles"
+        case .unstable: return report.samples.isEmpty ? "Le PC ne répond pas" : "Instable : préfère le câble ou le Wi-Fi 6 GHz"
+        }
+    }
+
+    private var color: Color {
+        switch report.verdict {
+        case .excellent: return mvOnline
+        case .fair: return .orange
+        case .unstable: return mvDanger
+        }
+    }
+
+    private func milliseconds(_ value: Double) -> String {
+        value.formatted(.number.precision(.fractionLength(1))) + " ms"
     }
 }

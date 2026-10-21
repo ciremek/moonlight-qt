@@ -61,7 +61,8 @@ enum MVSettingsSection: String, CaseIterable, Identifiable {
         case .advanced:
             return [String(localized: "Codec vidéo"), String(localized: "YUV 4:4:4"), String(localized: "Décodeur vidéo"), String(localized: "Moteur de rendu"), String(localized: "Débloquer le débit"),
                     String(localized: "Optimiser les réglages des jeux"), String(localized: "Garder l'écran allumé"), String(localized: "Afficher les stats au démarrage"), String(localized: "Avertissements de connexion"),
-                    String(localized: "Avertissements de configuration"), String(localized: "Statut Discord")]
+                    String(localized: "Avertissements de configuration"), String(localized: "Statut Discord"),
+                    String(localized: "Rechercher les mises à jour")]
         }
     }
 }
@@ -500,6 +501,7 @@ struct MVNetworkSettings: View {
 
 struct MVAdvancedSettings: View {
     @ObservedObject var model: MVModel
+    @AppStorage(MVUpdateCheck.enabledKey) private var checkForUpdates = true
 
     var body: some View {
         Form {
@@ -553,6 +555,12 @@ struct MVAdvancedSettings: View {
                 MVSettingToggle(title: "Statut Discord",
                                 help: "Affiche le jeu en cours sur ton profil Discord.",
                                 isOn: model.binding(\.richPresence))
+            }
+            Section("Moonvibe") {
+                MVSettingToggle(title: "Rechercher les mises à jour",
+                                help: "Demande à GitHub si une nouvelle version est sortie, au lancement puis deux fois par jour.",
+                                isOn: $checkForUpdates)
+                    .onChange(of: checkForUpdates) { model.startUpdateChecks() }
             }
         }
         .formStyle(.grouped)

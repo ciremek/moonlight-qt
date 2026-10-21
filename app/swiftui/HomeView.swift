@@ -167,14 +167,28 @@ struct MVSidebar: View {
                 .padding(.bottom, 6)
         }
         .safeAreaInset(edge: .bottom) {
-            HStack {
-                Button {
-                    model.openSettings?(nil)
-                } label: {
-                    Label("Réglages", systemImage: "slider.horizontal.3")
+            VStack(alignment: .leading, spacing: 10) {
+                if let update = model.availableUpdate {
+                    Link(destination: update.url) {
+                        Label("Moonvibe \(update.version) est disponible", systemImage: "arrow.down.circle.fill")
+                            .font(.system(size: 12, weight: .semibold))
+                            .foregroundStyle(mvAccentForeground)
+                            .padding(.horizontal, 10)
+                            .padding(.vertical, 6)
+                            .background(Capsule().fill(mvAccent.opacity(0.12)))
+                    }
+                    .buttonStyle(.plain)
+                    .help("Ouvre la page de téléchargement")
                 }
-                .buttonStyle(.plain)
-                Spacer()
+                HStack {
+                    Button {
+                        model.openSettings?(nil)
+                    } label: {
+                        Label("Réglages", systemImage: "slider.horizontal.3")
+                    }
+                    .buttonStyle(.plain)
+                    Spacer()
+                }
             }
             .font(.system(size: 13))
             .padding(.horizontal, 16)
