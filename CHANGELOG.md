@@ -2,6 +2,16 @@
 
 Moonvibe versions, newest first. Each one builds on [Moonlight PC](https://github.com/moonlight-stream/moonlight-qt) 6.2.
 
+## 0.5.0 · Always up to date · October 21, 2026
+
+### New
+- **Automatic updates**: when a new version is out, a badge in the sidebar shows it. Click it to see what's new, and Moonvibe downloads the update, installs it and relaunches. It checks twice a day and never opens a window on its own, so nothing pops up over a stream. **Check Now…** in Settings, Advanced checks right away.
+- **Signed updates**: Moonvibe installs an update only if it carries the signature of Moonvibe's key, and macOS no longer asks you to confirm the new version's first launch.
+- **A styled DMG**: a background with an arrow to Applications, and bigger icons.
+
+### Coming from 0.4
+Download 0.5.0 by hand one last time: from then on, Moonvibe updates itself.
+
 ## 0.4.1 · Stay in the loop · October 21, 2026
 
 ### New

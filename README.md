@@ -51,7 +51,7 @@ Everything Moonlight does is still there (HEVC and AV1, HDR, 7.1 audio, gamepads
 ### 🛟 Reliability
 - If the PC falls asleep during a stream, it shows as **offline** as soon as you quit, and Moonvibe offers to wake it.
 - Home comes back **right away** after a stream, even when the PC stopped answering.
-- **Tells you when a new version is out**, with a link in the sidebar.
+- **Updates itself**: a badge in the sidebar shows a new version, and one click shows what's new, installs it and relaunches Moonvibe. Updates are signed, and checked before they install.
 - Discord status off by default, private logs in `~/Library/Logs/Moonvibe`.
 
 ## Install
@@ -61,6 +61,8 @@ Everything Moonlight does is still there (HEVC and AV1, HDR, 7.1 audio, gamepads
 1. Download `Moonvibe-x.y.z.dmg` from the [latest release](https://github.com/ciremek/moonvibe/releases/latest).
 2. Open the DMG and drag **Moonvibe** to **Applications**.
 3. On first launch, macOS blocks Moonvibe because it isn't signed by an identified Apple developer. Open **System Settings → Privacy & Security** and click **Open Anyway** next to Moonvibe. You only do this once.
+
+From then on, Moonvibe updates itself. Coming from 0.4 or earlier? Install 0.5.0 by hand once.
 
 <details>
 <summary>Or with one Terminal command</summary>
@@ -87,9 +89,12 @@ You need Xcode and Qt 6 from Homebrew (`brew install qt`).
 git clone --recursive -b moonvibe https://github.com/ciremek/moonvibe.git
 cd moonvibe
 python3 setup-deps.py           # FFmpeg, SDL and friends, prebuilt by Moonlight
+./scripts/setup-sparkle.sh      # Sparkle, the update framework
 ./build-mac.sh                  # build/app/Moonvibe.app
-./scripts/package-moonvibe.sh   # build/release/Moonvibe-x.y.z.dmg (sets up dmgbuild the first time)
+./scripts/package-moonvibe.sh   # build/release: the DMG and its appcast (sets up dmgbuild the first time)
 ```
+
+Packaging signs the DMG and the appcast with the maintainer's Sparkle key, from the login Keychain.
 
 ## Versions
 
