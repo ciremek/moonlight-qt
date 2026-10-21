@@ -2,6 +2,12 @@
 
 Moonvibe versions, newest first. Each one builds on [Moonlight PC](https://github.com/moonlight-stream/moonlight-qt) 6.2.
 
+## 0.4.1 · Stay in the loop · October 21, 2026
+
+### New
+- **Connection test** in the PC settings: latency, variation (jitter) and loss over about ten seconds, the link this Mac uses (Ethernet, or the Wi-Fi band and channel), and a clear verdict. It works even when the PC's firewall drops pings.
+- **Update check**: Moonvibe tells you in the sidebar when a newer version is out, and links to it. It checks GitHub at launch and twice a day, and can be turned off in Settings, Advanced.
+
 ## 0.4.0 · Make it yours · October 21, 2026
 
 ### New

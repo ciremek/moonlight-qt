@@ -46,10 +46,12 @@ Everything Moonlight does is still there (HEVC and AV1, HDR, 7.1 audio, gamepads
 - **LAN at home, VPN on the go**, with nothing to switch: as soon as your Mac is on the PC's network, Moonvibe uses its local address, and your Tailscale or WireGuard address elsewhere.
 - **AWDL off while streaming** (optional): AirDrop, AirPlay and friends stop causing Wi-Fi latency spikes. It asks for admin approval once.
 - **Auto resolution**: the stream uses the native resolution of the display it opens on.
+- **Connection test** in the PC settings: latency, variation and loss, and the Wi-Fi band or Ethernet link this Mac uses.
 
 ### 🛟 Reliability
 - If the PC falls asleep during a stream, it shows as **offline** as soon as you quit, and Moonvibe offers to wake it.
 - Home comes back **right away** after a stream, even when the PC stopped answering.
+- **Tells you when a new version is out**, with a link in the sidebar.
 - Discord status off by default, private logs in `~/Library/Logs/Moonvibe`.
 
 ## Install
