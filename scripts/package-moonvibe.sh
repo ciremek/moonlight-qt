@@ -4,6 +4,10 @@
 #
 # Without a Developer ID, the app is signed ad hoc: Gatekeeper asks the user to
 # confirm the first launch (see README.md).
+#
+# The DMG window (background, icon positions, volume icon) comes from dmgbuild,
+# which the first run installs from PyPI into build/dmgbuild-env. Its layout is
+# in scripts/dmg: settings.py, and make-background.swift for the background.
 set -euo pipefail
 cd "$(dirname "$0")/.."
 export DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer
@@ -63,8 +67,15 @@ codesign --force --deep --sign - "$APP" || fail "Signing failed!"
 codesign --verify --deep --strict "$APP" || fail "Signature check failed!"
 
 echo "Creating the DMG"
-ln -s /Applications "$STAGING/Applications"
+# dmgbuild, pinned, in a virtual environment of its own under build/
+DMGBUILD_ENV=build/dmgbuild-env
+if [ ! -x "$DMGBUILD_ENV/bin/dmgbuild" ]; then
+    python3 -m venv "$DMGBUILD_ENV" || fail "Couldn't create the dmgbuild environment"
+    "$DMGBUILD_ENV/bin/pip" install --quiet --disable-pip-version-check dmgbuild==1.6.5 || fail "Couldn't install dmgbuild"
+fi
 mkdir -p "$RELEASE_DIR"
-hdiutil create -volname "Moonvibe $VERSION" -srcfolder "$STAGING" -ov -format UDZO "$DMG" || fail "hdiutil failed!"
+"$DMGBUILD_ENV/bin/dmgbuild" -s scripts/dmg/settings.py \
+    -D app="$APP" -D background=scripts/dmg/background.tiff -D volume_icon=app/moonvibe.icns \
+    "Moonvibe $VERSION" "$DMG" || fail "dmgbuild failed!"
 
 echo "Built: $(pwd)/$DMG"

@@ -88,7 +88,7 @@ git clone --recursive -b moonvibe https://github.com/ciremek/moonvibe.git
 cd moonvibe
 python3 setup-deps.py           # FFmpeg, SDL and friends, prebuilt by Moonlight
 ./build-mac.sh                  # build/app/Moonvibe.app
-./scripts/package-moonvibe.sh   # build/release/Moonvibe-x.y.z.dmg
+./scripts/package-moonvibe.sh   # build/release/Moonvibe-x.y.z.dmg (sets up dmgbuild the first time)
 ```
 
 ## Versions
