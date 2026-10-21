@@ -501,7 +501,9 @@ struct MVNetworkSettings: View {
 
 struct MVAdvancedSettings: View {
     @ObservedObject var model: MVModel
-    @AppStorage(MVUpdateCheck.enabledKey) private var checkForUpdates = true
+    /// Sparkle's own key, so the switch follows it
+    @AppStorage("SUEnableAutomaticChecks") private var checkForUpdates = true
+    private let version = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? ""
 
     var body: some View {
         Form {
@@ -558,9 +560,14 @@ struct MVAdvancedSettings: View {
             }
             Section("Moonvibe") {
                 MVSettingToggle(title: "Rechercher les mises à jour",
-                                help: "Demande à GitHub si une nouvelle version est sortie, au lancement puis deux fois par jour.",
+                                help: "Vérifie deux fois par jour si une nouvelle version est sortie.",
                                 isOn: $checkForUpdates)
-                    .onChange(of: checkForUpdates) { model.startUpdateChecks() }
+                    .onChange(of: checkForUpdates) { model.updater?.automaticallyChecks = checkForUpdates }
+                LabeledContent {
+                    Button("Rechercher maintenant…") { model.updater?.checkForUpdates() }
+                } label: {
+                    Text("Moonvibe \(version)")
+                }
             }
         }
         .formStyle(.grouped)

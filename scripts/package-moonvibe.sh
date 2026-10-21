@@ -1,9 +1,12 @@
 #!/bin/bash
-# Build Moonvibe and package it as a self-contained DMG for Apple Silicon Macs:
-# build/release/Moonvibe-<version>.dmg
+# Build Moonvibe and package it as a self-contained DMG for Apple Silicon Macs,
+# with the Sparkle appcast that announces it: build/release/Moonvibe-<version>.dmg
+# and build/release/appcast.xml, both for the version's GitHub release.
 #
 # Without a Developer ID, the app is signed ad hoc: Gatekeeper asks the user to
-# confirm the first launch (see README.md).
+# confirm the first launch (see README.md). Updates are verified with EdDSA
+# instead: sign_update signs the DMG and the appcast with the private key in
+# the login Keychain, which only the maintainer has.
 #
 # The DMG window (background, icon positions, volume icon) comes from dmgbuild,
 # which the first run installs from PyPI into build/dmgbuild-env. Its layout is
@@ -49,6 +52,10 @@ macdeployqt "$APP" -libpath=/opt/homebrew/lib || fail "macdeployqt failed!"
 rm -f "$APP/Contents/PlugIns/imageformats/libqpdf.dylib"
 rm -rf "$APP/Contents/PlugIns/platforminputcontexts"
 
+# Sparkle's XPC services only serve sandboxed apps
+rm -rf "$APP/Contents/Frameworks/Sparkle.framework/XPCServices" \
+    "$APP/Contents/Frameworks/Sparkle.framework/Versions/B/XPCServices"
+
 # A library's own install name (otool -D) doesn't matter for loading: only
 # the libraries it loads must come from the bundle
 echo "Checking that nothing still loads from Homebrew"
@@ -78,4 +85,20 @@ mkdir -p "$RELEASE_DIR"
     -D app="$APP" -D background=scripts/dmg/background.tiff -D volume_icon=app/moonvibe.icns \
     "Moonvibe $VERSION" "$DMG" || fail "dmgbuild failed!"
 
+# The release notes are the version's CHANGELOG.md section. sign_update may ask
+# for access to the key in the login Keychain.
+echo "Creating the appcast"
+SPARKLE_BIN=libs/sparkle/bin
+APPCAST=$RELEASE_DIR/appcast.xml
+rm -f "$APPCAST"
+ENCLOSURE=$("$SPARKLE_BIN/sign_update" "$DMG") || fail "Couldn't sign the DMG: is Sparkle's key in the login Keychain?"
+MINIMUM_MACOS=$(/usr/libexec/PlistBuddy -c "Print :LSMinimumSystemVersion" "$APP/Contents/Info.plist")
+python3 -I scripts/make-appcast.py "$VERSION" \
+    "https://github.com/ciremek/moonvibe/releases/download/moonvibe-v$VERSION/Moonvibe-$VERSION.dmg" \
+    "$ENCLOSURE" "$MINIMUM_MACOS" CHANGELOG.md > "$STAGING/appcast.xml" || fail "Couldn't create the appcast"
+"$SPARKLE_BIN/sign_update" "$STAGING/appcast.xml" >/dev/null || fail "Couldn't sign the appcast"
+cp "$STAGING/appcast.xml" "$APPCAST"
+
 echo "Built: $(pwd)/$DMG"
+echo "Built: $(pwd)/$APPCAST"
+echo "Attach both to the moonvibe-v$VERSION release: Moonvibe reads the appcast of the latest release"

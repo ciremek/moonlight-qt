@@ -62,5 +62,17 @@
 	<string>Moonvibe</string>
     <key>LSApplicationCategoryType</key>
 	<string>public.app-category.games</string>
+	<key>SUFeedURL</key>
+	<string>https://github.com/ciremek/moonvibe/releases/latest/download/appcast.xml</string>
+	<key>SUPublicEDKey</key>
+	<string>w0UGEcsWmJNHTFN1Fl1O+WXBzi7f3N8fPrULpRScMfA=</string>
+	<key>SUEnableAutomaticChecks</key>
+	<true/>
+	<key>SUScheduledCheckInterval</key>
+	<integer>43200</integer>
+	<key>SUVerifyUpdateBeforeExtraction</key>
+	<true/>
+	<key>SURequireSignedFeed</key>
+	<true/>
 </dict>
 </plist>

@@ -419,9 +419,9 @@ final class MVModel: ObservableObject {
     /// The busy work can be cancelled with esc.
     @Published var cancellable = true
     @Published var errorMessage: String?
-    /// A newer Moonvibe release on GitHub.
-    @Published private(set) var availableUpdate: MVUpdate?
-    private var updateTask: Task<Void, Never>?
+    var updater: MVUpdater?
+    /// Version of the update the sidebar badge shows, found by a scheduled check.
+    @Published var availableUpdate: String?
     @Published var showPairing = false
     @Published var pairingStep = MVPairingStep.search
     @Published var addingHost = false
@@ -820,24 +820,6 @@ final class MVModel: ObservableObject {
     func cancelLaunch() {
         guard busy, cancellable else { return }
         sendAction?(["action": "cancel"])
-    }
-
-    // MARK: Updates
-
-    /// Checks for a newer release now, then twice a day while Moonvibe runs.
-    func startUpdateChecks() {
-        updateTask?.cancel()
-        updateTask = Task { [weak self] in
-            while !Task.isCancelled {
-                if MVUpdateCheck.isEnabled {
-                    let update = await MVUpdateCheck.fetch()
-                    self?.availableUpdate = update
-                } else {
-                    self?.availableUpdate = nil
-                }
-                try? await Task.sleep(for: MVUpdateCheck.interval)
-            }
-        }
     }
 
     // MARK: App settings

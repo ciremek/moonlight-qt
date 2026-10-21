@@ -596,6 +596,12 @@ macx {
     SOURCES += swiftui/swiftuishell.cpp
     HEADERS += swiftui/swiftuishell.h swiftui/moonvibeui.h
 
+    # Sparkle installs updates; scripts/setup-sparkle.sh downloads it
+    SPARKLE_DIR = $$PWD/../libs/sparkle
+    !exists($$SPARKLE_DIR/Sparkle.framework) {
+        error("Sparkle is missing: run scripts/setup-sparkle.sh")
+    }
+
     SWIFTUI_SOURCES = $$files($$PWD/swiftui/*.swift)
     # Relative to the build directory, where make runs
     SWIFTUI_DYLIB = libMoonvibeUI.dylib
@@ -603,6 +609,7 @@ macx {
     swiftui.depends = $$SWIFTUI_SOURCES
     swiftui.commands = xcrun swiftc -emit-library -parse-as-library -O \
         -module-name MoonvibeUI -target arm64-apple-macos14.4 \
+        -F $$SPARKLE_DIR -framework Sparkle \
         -Xlinker -install_name -Xlinker @rpath/libMoonvibeUI.dylib \
         -o $$SWIFTUI_DYLIB $$SWIFTUI_SOURCES
     QMAKE_EXTRA_TARGETS += swiftui
@@ -612,6 +619,10 @@ macx {
     SWIFTUI_BUNDLE.files = $$SWIFTUI_DYLIB
     SWIFTUI_BUNDLE.path = Contents/Frameworks
     QMAKE_BUNDLE_DATA += SWIFTUI_BUNDLE
+
+    SPARKLE_BUNDLE.files = $$SPARKLE_DIR/Sparkle.framework
+    SPARKLE_BUNDLE.path = Contents/Frameworks
+    QMAKE_BUNDLE_DATA += SPARKLE_BUNDLE
 
     # The shell's translations: the code's text is French, en.lproj translates it.
     # fr.lproj must exist for macOS to pick French on a French Mac.

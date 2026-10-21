@@ -12,7 +12,7 @@ WORK=$(mktemp -d)
 trap 'rm -rf "$WORK"' EXIT
 
 xcrun swiftc -emit-library -parse-as-library -module-name MoonvibeUI -target arm64-apple-macos14.4 \
-    -Xlinker -undefined -Xlinker dynamic_lookup \
+    -F libs/sparkle -Xlinker -undefined -Xlinker dynamic_lookup \
     -emit-localized-strings -emit-localized-strings-path "$WORK" \
     -o "$WORK/libcheck.dylib" app/swiftui/*.swift 2>/dev/null
 

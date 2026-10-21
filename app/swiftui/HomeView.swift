@@ -168,9 +168,11 @@ struct MVSidebar: View {
         }
         .safeAreaInset(edge: .bottom) {
             VStack(alignment: .leading, spacing: 10) {
-                if let update = model.availableUpdate {
-                    Link(destination: update.url) {
-                        Label("Moonvibe \(update.version) est disponible", systemImage: "arrow.down.circle.fill")
+                if let version = model.availableUpdate {
+                    Button {
+                        model.updater?.checkForUpdates()
+                    } label: {
+                        Label("Moonvibe \(version) est disponible", systemImage: "arrow.down.circle.fill")
                             .font(.system(size: 12, weight: .semibold))
                             .foregroundStyle(mvAccentForeground)
                             .padding(.horizontal, 10)
@@ -178,7 +180,7 @@ struct MVSidebar: View {
                             .background(Capsule().fill(mvAccent.opacity(0.12)))
                     }
                     .buttonStyle(.plain)
-                    .help("Ouvre la page de téléchargement")
+                    .help("Voir les nouveautés et installer")
                 }
                 HStack {
                     Button {

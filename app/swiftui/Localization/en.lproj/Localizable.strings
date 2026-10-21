@@ -77,7 +77,6 @@
 "Couper l'AWDL" = "Turn off AWDL";
 "Couper le son du PC" = "Mute the PC";
 "Couper le son en arrière-plan" = "Mute in the background";
-"Demande à GitHub si une nouvelle version est sortie, au lancement puis deux fois par jour." = "Asks GitHub whether a new version is out, at launch and then twice a day.";
 "Débit" = "Bitrate";
 "Débit vidéo" = "Video bitrate";
 "Débloquer le débit" = "Unlock bitrate";
@@ -166,6 +165,7 @@
 "Mode d'affichage" = "Display mode";
 "Monte le débit jusqu'à 500 Mb/s au lieu de 150." = "Raises the bitrate limit to 500 Mb/s instead of 150.";
 "Moonvibe" = "Moonvibe";
+"Moonvibe %@" = "Moonvibe %@";
 "Moonvibe %@ est disponible" = "Moonvibe %@ is available";
 "Moonvibe essaie le réseau local en premier quand ce Mac y est, puis les autres adresses." = "Moonvibe tries the local network first when this Mac is on it, then the other addresses.";
 "Moteur de rendu" = "Renderer";
@@ -183,7 +183,6 @@
 "Ordinateurs et réseau" = "Computers & Network";
 "Ou ajoute-le à la main" = "Or add it by hand";
 "Ouvre des apps sur ce Mac" = "Opens apps on this Mac";
-"Ouvre la page de téléchargement" = "Opens the download page";
 "Pas encore enregistré" = "Not saved yet";
 "PC injoignable : ton réseau semble bloquer la connexion." = "PC unreachable: your network seems to block the connection.";
 "PC introuvable à cette adresse. Vérifie qu'il est allumé et que Sunshine tourne." = "No PC found at this address. Check that it's on and that Sunshine is running.";
@@ -221,6 +220,7 @@
 "Recherche en cours…" = "Searching…";
 "Rechercher" = "Search";
 "Rechercher les mises à jour" = "Check for updates";
+"Rechercher maintenant…" = "Check Now…";
 "Rechercher un réglage" = "Search Settings";
 "Relancer %@ sur %@" = "Launch %@ again on %@";
 "Reprendre %@" = "Resume %@";
@@ -287,9 +287,11 @@
 "Vert" = "Green";
 "Vidéo" = "Video";
 "Violet" = "Purple";
+"Voir les nouveautés et installer" = "See what's new and install";
 "Vulkan" = "Vulkan";
 "Vérifie le Wake-on-LAN dans son BIOS et son adresse MAC." = "Check Wake-on-LAN in its BIOS and its MAC address.";
 "Vérifie que ce Mac est connecté au réseau." = "Check that this Mac is connected to the network.";
+"Vérifie deux fois par jour si une nouvelle version est sortie." = "Checks twice a day whether a new version is out.";
 "Vérifie que ce PC répond à cette adresse" = "Checks that this PC answers on this address";
 "Wi-Fi %@ · canal %lld" = "Wi-Fi %@ · channel %lld";
 "Wi-Fi %@ · canal %lld · %@" = "Wi-Fi %@ · channel %lld · %@";
