@@ -18,7 +18,7 @@ and settings tuned for macOS.
 
 </div>
 
-![Moonvibe's Home window: your PCs, their apps and the quality preset](docs/images/home.png)
+![Moonvibe's Home window: your PCs, their apps with custom tiles, and the quality preset](docs/images/home.png)
 
 ## What Moonvibe adds to Moonlight
 
