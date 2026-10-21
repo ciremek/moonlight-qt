@@ -16,7 +16,8 @@
 // - add host result: {success, portBlocking}
 // - wake result: {uuid, sent}
 // - address test result: {uuid, address, result: "ok" | "other" | "unreachable" | "invalid"}
-// - actions sent back by the shell: {action: "launch", uuid, appId, displayX, displayY}
+// - actions sent back by the shell: {action: "launch", uuid, appId, displayX, displayY,
+//                                    overrides?: {resolutionMode, width, height, fps, bitrateKbps}}
 //   | {action: "cancel"} | {action: "wake", uuid, mac?, address?, port?} | {action: "quitApp", uuid}
 //   | {action: "setPrefs", prefs} | {action: "pair", uuid} | {action: "addHost", address}
 //   | {action: "deleteHost", uuid} | {action: "streamAction", value: Session::StreamAction}

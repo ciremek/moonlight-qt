@@ -46,6 +46,8 @@
 	</dict>
 	<key>NSLocalNetworkUsageDescription</key>
 	<string>Moonvibe uses the local network to connect to your gaming PC for streaming.</string>
+	<key>NSAppleEventsUsageDescription</key>
+	<string>Moonvibe quits the apps it opened for a stream once the stream ends.</string>
 	<key>NSBonjourServices</key>
 	<array>
 		<string>_nvstream._tcp</string>

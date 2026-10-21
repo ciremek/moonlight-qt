@@ -111,7 +111,7 @@ struct MVPrefs: Codable, Equatable {
 
 // MARK: - Presets
 
-enum MVPreset: String, CaseIterable, Identifiable {
+enum MVPreset: String, CaseIterable, Identifiable, Codable {
     case fluid, balanced, max, custom
     var id: String { rawValue }
 
@@ -247,6 +247,57 @@ struct MVAddHostResult: Decodable {
 struct MVAppRef: Equatable {
     let computerId: String
     let appId: Int
+}
+
+// MARK: - App settings
+
+/// Tile colors, from a palette that reads in both appearances.
+enum MVTileColor: String, Codable, CaseIterable, Identifiable {
+    case indigo, blue, teal, green, orange, red, pink, purple, graphite
+    var id: String { rawValue }
+
+    var color: Color {
+        switch self {
+        case .indigo: return mvAccentForeground
+        case .blue: return .blue
+        case .teal: return .teal
+        case .green: return .green
+        case .orange: return .orange
+        case .red: return .red
+        case .pink: return .pink
+        case .purple: return .purple
+        case .graphite: return .gray
+        }
+    }
+
+    var label: String {
+        switch self {
+        case .indigo: return "Indigo"
+        case .blue: return "Bleu"
+        case .teal: return "Turquoise"
+        case .green: return "Vert"
+        case .orange: return "Orange"
+        case .red: return "Rouge"
+        case .pink: return "Rose"
+        case .purple: return "Violet"
+        case .graphite: return "Graphite"
+        }
+    }
+}
+
+/// Moonvibe's own settings for one app on one PC.
+struct MVAppSettings: Codable, Equatable {
+    /// SF Symbol for the tile, else one guessed from the app's name.
+    var symbol: String?
+    var color: MVTileColor?
+    /// Quality for this app's streams, else the usual one.
+    var preset: MVPreset?
+    /// Mac apps to open when a stream of this app starts, by path.
+    var openApps: [String] = []
+    /// Quit, when the stream ends, the apps Moonvibe opened for it.
+    var quitOpenedApps = true
+
+    var isEmpty: Bool { self == MVAppSettings() }
 }
 
 // MARK: - Addresses
@@ -387,6 +438,12 @@ final class MVModel: ObservableObject {
     @Published private(set) var wakeStates: [String: MVWakeState] = [:]
     /// Computer whose settings sheet is open.
     @Published var computerSettingsId: String?
+    /// App whose settings sheet is open.
+    @Published var appSettingsTarget: MVAppRef?
+    /// Settings by "computerId:appId".
+    @Published private(set) var appSettings: [String: MVAppSettings] = [:]
+    /// Bundle IDs of the apps Moonvibe opened for the current stream, to quit when it ends.
+    private var appsToQuitAfterStream: Set<String>?
     /// Labels given to added addresses, by computer id then address.
     @Published private(set) var addressLabels: [String: [String: String]] = [:]
     /// Address checks, by computer id then address as typed.
@@ -407,6 +464,7 @@ final class MVModel: ObservableObject {
     private static let recentsKey = "MoonvibeRecents"
     private static let wakeOptionsKey = "MoonvibeWakeOptions"
     private static let addressLabelsKey = "MoonvibeAddressLabels"
+    private static let appSettingsKey = "MoonvibeAppSettings"
 
     init() {
         if let data = UserDefaults.standard.data(forKey: Self.recentsKey),
@@ -420,6 +478,10 @@ final class MVModel: ObservableObject {
         if let data = UserDefaults.standard.data(forKey: Self.addressLabelsKey),
            let decoded = try? JSONDecoder().decode([String: [String: String]].self, from: data) {
             addressLabels = decoded
+        }
+        if let data = UserDefaults.standard.data(forKey: Self.appSettingsKey),
+           let decoded = try? JSONDecoder().decode([String: MVAppSettings].self, from: data) {
+            appSettings = decoded
         }
     }
 
@@ -634,13 +696,20 @@ final class MVModel: ObservableObject {
         cancellable = true
         status = "Connexion à \(computer.name)…"
         rememberRecent(app, on: computer)
-        sendAction?([
+
+        let settings = self.settings(of: app, on: computer)
+        openAppsBeforeStream(settings)
+        var action: [String: Any] = [
             "action": "launch",
             "uuid": computer.uuid,
             "appId": app.id,
             "displayX": Int(display.origin.x),
             "displayY": Int(display.origin.y),
-        ])
+        ]
+        if let overrides = qualityOverrides(for: settings.preset) {
+            action["overrides"] = overrides
+        }
+        sendAction?(action)
     }
 
     func launch(_ recent: MVRecent) {
@@ -739,12 +808,86 @@ final class MVModel: ObservableObject {
         stopWaking(computer.id)
         setWakeOptions(MVWakeOptions(), for: computer)
         setAddressLabels([:], for: computer)
+        appSettings = appSettings.filter { !$0.key.hasPrefix("\(computer.id):") }
+        saveAppSettings()
         sendAction?(["action": "deleteHost", "uuid": computer.uuid])
     }
 
     func cancelLaunch() {
         guard busy, cancellable else { return }
         sendAction?(["action": "cancel"])
+    }
+
+    // MARK: App settings
+
+    func settings(of app: MVApp, on computer: MVComputer) -> MVAppSettings {
+        appSettings["\(computer.id):\(app.id)"] ?? MVAppSettings()
+    }
+
+    func setSettings(_ settings: MVAppSettings, of app: MVApp, on computer: MVComputer) {
+        appSettings["\(computer.id):\(app.id)"] = settings.isEmpty ? nil : settings
+        saveAppSettings()
+    }
+
+    private func saveAppSettings() {
+        if let data = try? JSONEncoder().encode(appSettings) {
+            UserDefaults.standard.set(data, forKey: Self.appSettingsKey)
+        }
+    }
+
+    /// Opens the Mac apps an app's stream needs. Apps already running are left alone,
+    /// before and after the stream.
+    private func openAppsBeforeStream(_ settings: MVAppSettings) {
+        if appsToQuitAfterStream == nil {
+            appsToQuitAfterStream = []
+        }
+        for path in settings.openApps {
+            let url = URL(fileURLWithPath: path)
+            guard let bundleId = Bundle(url: url)?.bundleIdentifier,
+                  NSRunningApplication.runningApplications(withBundleIdentifier: bundleId).isEmpty
+            else { continue }
+
+            // Tracked by bundle ID, not by process: some apps restart themselves, like
+            // VirtualHere, which comes back as root once given the admin password
+            if settings.quitOpenedApps {
+                appsToQuitAfterStream?.insert(bundleId)
+            }
+            let configuration = NSWorkspace.OpenConfiguration()
+            configuration.activates = false
+            NSWorkspace.shared.openApplication(at: url, configuration: configuration)
+        }
+    }
+
+    /// The stream window went away: quit the apps opened for it.
+    func streamWindowClosed() {
+        let bundleIds = appsToQuitAfterStream ?? []
+        appsToQuitAfterStream = nil
+        bundleIds.forEach(Self.quitApp(bundleIdentifier:))
+    }
+
+    /// Asks every instance of an app to quit. A standard quit event also reaches an
+    /// instance running as root, which terminate() can't, and needs no admin rights.
+    private static func quitApp(bundleIdentifier: String) {
+        NSRunningApplication.runningApplications(withBundleIdentifier: bundleIdentifier).forEach { $0.terminate() }
+
+        let event = NSAppleEventDescriptor(eventClass: AEEventClass(kCoreEventClass),
+                                           eventID: AEEventID(kAEQuitApplication),
+                                           targetDescriptor: NSAppleEventDescriptor(bundleIdentifier: bundleIdentifier),
+                                           returnID: AEReturnID(kAutoGenerateReturnID),
+                                           transactionID: AETransactionID(kAnyTransactionID))
+        _ = try? event.sendEvent(options: [.noReply], timeout: 3)
+    }
+
+    /// The values the host streams an app with when it has its own quality.
+    private func qualityOverrides(for preset: MVPreset?) -> [String: Any]? {
+        guard let preset else { return nil }
+        if preset == .custom {
+            guard let custom = customPreset else { return nil }
+            return ["resolutionMode": custom.resolutionMode.rawValue, "width": custom.width,
+                    "height": custom.height, "fps": custom.fps, "bitrateKbps": custom.bitrateKbps]
+        }
+        return ["resolutionMode": preset.resolutionMode.rawValue, "fps": display.maxFps,
+                "bitrateKbps": preset.bitrateKbps]
     }
 
     // MARK: Computer settings

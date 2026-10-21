@@ -336,7 +336,8 @@ void SwiftUIShell::dispatch(const QJsonObject& action)
 
     if (type == "launch") {
         launch(action["uuid"].toString(), action["appId"].toInt(),
-               QPoint(action["displayX"].toInt(), action["displayY"].toInt()));
+               QPoint(action["displayX"].toInt(), action["displayY"].toInt()),
+               action["overrides"].toObject());
     }
     else if (type == "cancel") {
         if (m_Session != nullptr) {
@@ -550,7 +551,7 @@ void SwiftUIShell::setStatus(const QString& text, bool busy, bool error, bool ca
     mv_ui_set_status(toJson(status).constData());
 }
 
-void SwiftUIShell::launch(const QString& computerUuid, int appId, const QPoint& displayOrigin)
+void SwiftUIShell::launch(const QString& computerUuid, int appId, const QPoint& displayOrigin, const QJsonObject& overrides)
 {
     // The previous session is still cleaning up, for a few seconds at most
     if (m_Session != nullptr) {
@@ -576,7 +577,24 @@ void SwiftUIShell::launch(const QString& computerUuid, int appId, const QPoint& 
     }
 
     m_LaunchError.clear();
-    m_Session = new Session(computer, app);
+
+    // An app with its own quality streams with a copy of the preferences, adjusted for
+    // this stream only: the saved preferences don't change, even if Moonvibe quits mid-stream
+    StreamingPreferences* prefs = m_Prefs;
+    if (!overrides.isEmpty()) {
+        prefs = StreamingPreferences::createDetached();
+        prefs->resolutionMode = static_cast<StreamingPreferences::ResolutionMode>(
+                    overrides["resolutionMode"].toInt(static_cast<int>(prefs->resolutionMode)));
+        prefs->width = overrides["width"].toInt(prefs->width);
+        prefs->height = overrides["height"].toInt(prefs->height);
+        prefs->fps = overrides["fps"].toInt(prefs->fps);
+        prefs->bitrateKbps = overrides["bitrateKbps"].toInt(prefs->bitrateKbps);
+    }
+
+    m_Session = new Session(computer, app, prefs);
+    if (prefs != m_Prefs) {
+        prefs->setParent(m_Session);
+    }
     m_Session->setDisplayOrigin(displayOrigin);
     m_Session->setExternalOverlayUi(true);
 
@@ -585,7 +603,7 @@ void SwiftUIShell::launch(const QString& computerUuid, int appId, const QPoint& 
     QByteArray overlayInfo = toJson(QJsonObject {
         { "computer", computer->name },
         { "app", app.name },
-        { "targetMbps", m_Prefs->bitrateKbps / 1000.0 },
+        { "targetMbps", prefs->bitrateKbps / 1000.0 },
     });
     connect(m_Session, &Session::streamWindowReady, this, [overlayInfo](void* nativeWindow) {
         mv_overlay_begin(nativeWindow, overlayInfo.constData(), &SwiftUIShell::streamState);

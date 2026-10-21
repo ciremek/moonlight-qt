@@ -11,6 +11,10 @@ class StreamingPreferences : public QObject
 public:
     static StreamingPreferences* get(QQmlEngine *qmlEngine = nullptr);
 
+    // A fresh copy of the saved preferences that one stream can adjust without
+    // saving them. The caller owns it.
+    static StreamingPreferences* createDetached();
+
     Q_INVOKABLE static int
     getDefaultBitrate(int width, int height, int fps, bool yuv444);
 

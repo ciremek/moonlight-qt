@@ -87,6 +87,16 @@ struct MVRootView: View {
                 MVComputerSettingsSheet(model: model, computer: computer)
             }
         }
+        .sheet(isPresented: Binding(
+            get: { model.appSettingsTarget != nil },
+            set: { if !$0 { model.appSettingsTarget = nil } }
+        )) {
+            if let target = model.appSettingsTarget,
+               let computer = model.computers.first(where: { $0.id == target.computerId }),
+               let app = computer.apps.first(where: { $0.id == target.appId }) {
+                MVAppSettingsSheet(model: model, computer: computer, app: app)
+            }
+        }
         .alert("Lancement impossible", isPresented: Binding(
             get: { model.errorMessage != nil },
             set: { if !$0 { model.errorMessage = nil } }
@@ -303,6 +313,7 @@ struct MVComputerHome: View {
                                   alignment: .leading, spacing: spacing) {
                             ForEach(apps) { app in
                                 MVAppTile(app: app,
+                                          settings: model.settings(of: app, on: computer),
                                           selected: app.id == selected?.id && gridFocused,
                                           highlighted: app.id == selected?.id,
                                           running: app.id == computer.runningAppId,
@@ -312,8 +323,16 @@ struct MVComputerHome: View {
                                         model.selectedAppId = app.id
                                         gridFocused = true
                                     })
+                                    .contextMenu {
+                                        Button("Réglages \(mvOf(app.name))…") {
+                                            model.appSettingsTarget = MVAppRef(computerId: computer.id, appId: app.id)
+                                        }
+                                    }
                                     .accessibilityAddTraits(.isButton)
                                     .accessibilityAction { model.requestLaunch(app, on: computer) }
+                                    .accessibilityAction(named: "Réglages \(mvOf(app.name))") {
+                                        model.appSettingsTarget = MVAppRef(computerId: computer.id, appId: app.id)
+                                    }
                                     .accessibilityHint(computer.online ? "Lance l'app" : "Réveille le PC, puis lance l'app")
                             }
                         }
@@ -538,6 +557,7 @@ struct MVRunningBanner: View {
 
 struct MVAppTile: View {
     let app: MVApp
+    let settings: MVAppSettings
     let selected: Bool
     let highlighted: Bool
     let running: Bool
@@ -547,7 +567,8 @@ struct MVAppTile: View {
         VStack(alignment: .leading, spacing: 6) {
             ZStack(alignment: .topTrailing) {
                 RoundedRectangle(cornerRadius: 20, style: .continuous)
-                    .fill(highlighted ? mvAccent.opacity(0.12) : tileFill)
+                    .fill(settings.color.map { $0.color.opacity(highlighted ? 0.28 : 0.18) }
+                          ?? (highlighted ? mvAccent.opacity(0.12) : tileFill))
                     .aspectRatio(4.0 / 3.0, contentMode: .fit)
                     .overlay { artwork }
                     .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
@@ -557,6 +578,21 @@ struct MVAppTile: View {
                             .opacity(selected ? 1 : 0.55)
                     }
 
+                if !running, settings.preset != nil || !settings.openApps.isEmpty {
+                    // The stream does more than the usual: say so without words
+                    HStack(spacing: 4) {
+                        if let preset = settings.preset {
+                            Image(systemName: "dial.medium").help("Qualité propre : \(preset.label)")
+                        }
+                        if !settings.openApps.isEmpty {
+                            Image(systemName: "macwindow.on.rectangle").help("Ouvre des apps sur ce Mac")
+                        }
+                    }
+                    .font(.system(size: 11, weight: .semibold))
+                    .foregroundStyle(.secondary)
+                    .padding(10)
+                    .accessibilityHidden(true)
+                }
                 if running {
                     Text("En cours")
                         .font(.system(size: 11, weight: .semibold))
@@ -579,9 +615,9 @@ struct MVAppTile: View {
     // Icon + tint, as in the design. Sunshine's box art is portrait poster art that
     // gets cropped badly in 4:3 tiles, so it stays unused until the tiles get a poster mode.
     private var artwork: some View {
-        Image(systemName: app.symbolName)
+        Image(systemName: settings.symbol ?? app.symbolName)
             .font(.system(size: 30, weight: .regular))
-            .foregroundStyle(.primary.opacity(0.75))
+            .foregroundStyle(settings.color.map { AnyShapeStyle($0.color) } ?? AnyShapeStyle(.primary.opacity(0.75)))
     }
 }
 

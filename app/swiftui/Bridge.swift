@@ -144,8 +144,11 @@ public func mvUiAddressTestResult(_ json: UnsafePointer<CChar>) {
 @_cdecl("mv_ui_set_visible")
 public func mvUiSetVisible(_ visible: Bool) {
     MainActor.assumeIsolated {
-        guard let window = MVWindowController.shared?.window else { return }
+        guard let controller = MVWindowController.shared else { return }
+        let window = controller.window
         if visible {
+            // Home comes back when the stream window goes away
+            controller.model.streamWindowClosed()
             NSApp.activate(ignoringOtherApps: true)
             window.makeKeyAndOrderFront(nil)
         } else {

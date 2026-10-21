@@ -36,7 +36,7 @@ private:
     static int streamState();
 
     void dispatch(const QJsonObject& action);
-    void launch(const QString& computerUuid, int appId, const QPoint& displayOrigin);
+    void launch(const QString& computerUuid, int appId, const QPoint& displayOrigin, const QJsonObject& overrides);
     void pair(const QString& computerUuid);
     void wake(const QJsonObject& action);
     void testAddress(const QString& computerUuid, const QString& text);
