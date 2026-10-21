@@ -80,7 +80,7 @@ struct MVComputerSettingsSheet: View {
                         addressRow($row)
                     }
                     Button {
-                        rows.append(AddressRow(text: "", label: ""))
+                        withAnimation(.mvState) { rows.append(AddressRow(text: "", label: "")) }
                     } label: {
                         Label("Ajouter une adresse", systemImage: "plus")
                     }
@@ -152,28 +152,31 @@ struct MVComputerSettingsSheet: View {
 
     @ViewBuilder
     private var connectionTest: some View {
-        if tester.running {
-            HStack(spacing: 12) {
-                ProgressView(value: tester.progress)
-                Button("Arrêter") { tester.stop() }
-            }
-        } else {
-            if let report = tester.report {
-                MVConnectionReportView(report: report)
-            }
-            Button {
-                if let address = activeAddress {
-                    tester.start(host: address.address, port: address.port)
+        Group {
+            if tester.running {
+                HStack(spacing: 12) {
+                    MVLatencyTrace(trace: tester.trace)
+                    Button("Arrêter") { tester.stop() }
                 }
-            } label: {
-                if tester.report == nil {
-                    Text("Tester la connexion")
-                } else {
-                    Text("Tester à nouveau")
+            } else {
+                if let report = tester.report {
+                    MVConnectionReportView(report: report)
                 }
+                Button {
+                    if let address = activeAddress {
+                        tester.start(host: address.address, port: address.port)
+                    }
+                } label: {
+                    if tester.report == nil {
+                        Text("Tester la connexion")
+                    } else {
+                        Text("Tester à nouveau")
+                    }
+                }
+                .disabled(activeAddress == nil)
             }
-            .disabled(activeAddress == nil)
         }
+        .animation(.mvState, value: tester.running)
     }
 
     @ViewBuilder
@@ -197,7 +200,8 @@ struct MVComputerSettingsSheet: View {
                 .disabled(text.isEmpty)
             }
             Button {
-                rows.removeAll { $0.id == row.wrappedValue.id }
+                let id = row.wrappedValue.id
+                withAnimation(.mvState) { rows.removeAll { $0.id == id } }
             } label: {
                 Image(systemName: "minus.circle")
             }
@@ -240,29 +244,34 @@ private struct MVActiveBadge: View {
     }
 }
 
-/// A Test button, then the outcome of the check.
+/// A Test button, then the outcome of the check, which pops in.
 private struct MVAddressTestStatus: View {
     let test: MVAddressTest?
     let action: () -> Void
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
-        switch test {
-        case nil:
-            Button("Tester", action: action)
-                .controlSize(.small)
-                .help("Vérifie que ce PC répond à cette adresse")
-        case .testing:
-            ProgressView().controlSize(.small).frame(width: 20)
-                .accessibilityLabel("Test en cours")
-        case .ok:
-            icon("checkmark.circle.fill", color: mvOnline, help: "C'est bien ce PC qui répond")
-        case .otherComputer:
-            icon("exclamationmark.triangle.fill", color: .orange, help: "Un autre PC répond à cette adresse")
-        case .unreachable:
-            icon("wifi.exclamationmark", color: .secondary, help: "Injoignable pour l'instant, elle reste enregistrée")
-        case .invalid:
-            icon("xmark.octagon.fill", color: mvDanger, help: "Ce n'est pas une adresse valide")
+        Group {
+            switch test {
+            case nil:
+                Button("Tester", action: action)
+                    .controlSize(.small)
+                    .help("Vérifie que ce PC répond à cette adresse")
+            case .testing:
+                ProgressView().controlSize(.small).frame(width: 20)
+                    .accessibilityLabel("Test en cours")
+            case .ok:
+                icon("checkmark.circle.fill", color: mvOnline, help: "C'est bien ce PC qui répond")
+            case .otherComputer:
+                icon("exclamationmark.triangle.fill", color: .orange, help: "Un autre PC répond à cette adresse")
+            case .unreachable:
+                icon("wifi.exclamationmark", color: .secondary, help: "Injoignable pour l'instant, elle reste enregistrée")
+            case .invalid:
+                icon("xmark.octagon.fill", color: mvDanger, help: "Ce n'est pas une adresse valide")
+            }
         }
+        .transition(reduceMotion ? .opacity : .scale(scale: 0.4).combined(with: .opacity))
+        .animation(.bouncy(duration: 0.35), value: test)
     }
 
     private func icon(_ name: String, color: Color, help: LocalizedStringKey) -> some View {
@@ -276,6 +285,42 @@ private struct MVAddressTestStatus: View {
     }
 }
 
+/// The connection test's attempts as they come in: one bar per attempt, as tall as its
+/// round trip, red when it got no answer. The variation shows at a glance.
+private struct MVLatencyTrace: View {
+    let trace: [Double?]
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    private static let height: CGFloat = 34
+
+    /// The scale follows the slowest answer, with room above it.
+    private var ceiling: Double { max(8, (trace.compactMap { $0 }.max() ?? 0) * 1.15) }
+
+    var body: some View {
+        HStack(alignment: .bottom, spacing: 2) {
+            ForEach(0..<MVConnectionTester.sampleCount, id: \.self) { index in
+                bar(at: index)
+                    .frame(maxWidth: .infinity)
+            }
+        }
+        .frame(height: Self.height)
+        .animation(reduceMotion ? nil : .snappy(duration: 0.25), value: trace.count)
+        .accessibilityHidden(true)
+    }
+
+    @ViewBuilder
+    private func bar(at index: Int) -> some View {
+        let shape = Capsule(style: .continuous)
+        if index >= trace.count {
+            shape.fill(.quaternary).frame(height: 3)
+        } else if let ms = trace[index] {
+            shape.fill(mvAccentForeground).frame(height: max(3, Self.height * ms / ceiling))
+        } else {
+            shape.fill(mvDanger).frame(height: Self.height)
+        }
+    }
+}
+
 /// The outcome of a connection test: a verdict first, then the measures.
 private struct MVConnectionReportView: View {
     let report: MVConnectionReport
@@ -286,6 +331,7 @@ private struct MVConnectionReportView: View {
                 .accessibilityHidden(true)
             Text(verdict).fontWeight(.semibold)
         }
+        MVLatencyTrace(trace: report.trace)
         if !report.samples.isEmpty {
             LabeledContent("Latence", value: milliseconds(report.averageMs))
             LabeledContent("Variation", value: milliseconds(report.jitterMs))

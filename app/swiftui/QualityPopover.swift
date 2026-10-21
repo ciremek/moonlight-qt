@@ -6,6 +6,7 @@ import SwiftUI
 struct MVQualityPopover: View {
     @ObservedObject var model: MVModel
     @State private var showDetails = false
+    @Namespace private var presetSelection
 
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
@@ -14,7 +15,7 @@ struct MVQualityPopover: View {
 
             VStack(spacing: 8) {
                 ForEach(MVPreset.allCases) { preset in
-                    MVPresetCard(model: model, preset: preset)
+                    MVPresetCard(model: model, preset: preset, selection: presetSelection)
                 }
             }
 
@@ -56,6 +57,9 @@ struct MVQualityPopover: View {
 struct MVPresetCard: View {
     @ObservedObject var model: MVModel
     let preset: MVPreset
+    /// Shared by the cards: the highlight glides to the picked one.
+    let selection: Namespace.ID
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     private var selected: Bool { model.preset == preset }
 
@@ -65,12 +69,13 @@ struct MVPresetCard: View {
 
     var body: some View {
         Button {
-            model.apply(preset)
+            withAnimation(.mvGlide) { model.apply(preset) }
         } label: {
             HStack(spacing: 12) {
                 Image(systemName: selected ? "largecircle.fill.circle" : "circle")
                     .font(.system(size: 16))
                     .foregroundStyle(selected ? mvAccentForeground : .secondary)
+                    .contentTransition(.symbolEffect(.replace))
                     .accessibilityHidden(true)
                 Text(preset.label).font(.system(size: 13, weight: .semibold))
                 Spacer()
@@ -78,26 +83,36 @@ struct MVPresetCard: View {
                     .font(.system(size: 11))
                     .monospacedDigit()
                     .foregroundStyle(.secondary)
+                    .contentTransition(.numericText())
             }
             .padding(12)
-            .background(
+            .background {
                 ZStack {
                     // Opaque base: the popover is glass, and glass never sits on glass
                     RoundedRectangle(cornerRadius: 14, style: .continuous)
                         .fill(Color(nsColor: .controlBackgroundColor))
-                    RoundedRectangle(cornerRadius: 14, style: .continuous)
-                        .fill(selected ? mvAccent.opacity(0.10) : .clear)
+                    if selected {
+                        highlight
+                    }
                 }
-            )
-            .overlay(
-                RoundedRectangle(cornerRadius: 14, style: .continuous)
-                    .strokeBorder(selected ? mvAccentForeground.opacity(0.6) : .clear, lineWidth: 1.5)
-            )
+            }
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
         .help(preset.help)
         .accessibilityAddTraits(selected ? .isSelected : [])
+    }
+
+    @ViewBuilder
+    private var highlight: some View {
+        let shape = RoundedRectangle(cornerRadius: 14, style: .continuous)
+        let mark = shape.fill(mvAccent.opacity(0.10))
+            .overlay(shape.strokeBorder(mvAccentForeground.opacity(0.6), lineWidth: 1.5))
+        if reduceMotion {
+            mark
+        } else {
+            mark.matchedGeometryEffect(id: "preset", in: selection)
+        }
     }
 }
 

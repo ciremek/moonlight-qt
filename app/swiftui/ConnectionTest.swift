@@ -8,9 +8,11 @@ import Foundation
 import Network
 
 struct MVConnectionReport: Equatable {
+    /// Every attempt in order, in milliseconds: nil when it got no answer.
+    let trace: [Double?]
     /// Round trips that succeeded, in milliseconds.
-    let samples: [Double]
-    let attempts: Int
+    var samples: [Double] { trace.compactMap { $0 } }
+    var attempts: Int { trace.count }
     /// "Ethernet", "Wi-Fi 6 GHz · canal 5 · 160 MHz"…, or nil when nothing answered.
     let link: String?
 
@@ -38,35 +40,33 @@ struct MVConnectionReport: Equatable {
 @MainActor
 final class MVConnectionTester: ObservableObject {
     @Published private(set) var running = false
-    @Published private(set) var progress = 0.0
+    /// The attempts so far, drawn live while the test runs.
+    @Published private(set) var trace: [Double?] = []
     @Published private(set) var report: MVConnectionReport?
     private var task: Task<Void, Never>?
 
     /// About ten seconds: 40 samples, 250 ms apart.
-    private static let sampleCount = 40
+    static let sampleCount = 40
     private static let interval: Duration = .milliseconds(250)
 
     func start(host: String, port: Int) {
         task?.cancel()
         report = nil
-        progress = 0
+        trace = []
         running = true
         task = Task { [weak self] in
-            var samples: [Double] = []
-            var attempts = 0
             var wired: Bool?
-            for index in 0..<Self.sampleCount {
+            for _ in 0..<Self.sampleCount {
                 guard !Task.isCancelled else { return }
-                attempts += 1
-                if let (ms, isWired) = await Self.connectTime(host: host, port: port) {
-                    samples.append(ms)
+                let result = await Self.connectTime(host: host, port: port)
+                if let (_, isWired) = result {
                     wired = isWired
                 }
-                self?.progress = Double(index + 1) / Double(Self.sampleCount)
+                self?.trace.append(result?.0)
                 try? await Task.sleep(for: Self.interval)
             }
             guard let self, !Task.isCancelled else { return }
-            report = MVConnectionReport(samples: samples, attempts: attempts, link: Self.linkDescription(wired: wired))
+            report = MVConnectionReport(trace: trace, link: Self.linkDescription(wired: wired))
             running = false
         }
     }

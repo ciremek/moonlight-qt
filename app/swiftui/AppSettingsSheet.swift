@@ -10,6 +10,11 @@ struct MVAppSettingsSheet: View {
     let computer: MVComputer
     let app: MVApp
     @State private var settings: MVAppSettings
+    /// Times each symbol was picked: the picked one bounces.
+    @State private var picks: [String: Int] = [:]
+    @Namespace private var symbolSelection
+    @Namespace private var colorSelection
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     /// Tile icons to pick from: games, genres and a few useful apps.
     private static let symbols = [
@@ -102,7 +107,7 @@ struct MVAppSettingsSheet: View {
             .formStyle(.grouped)
 
             HStack {
-                Button("Réinitialiser") { settings = MVAppSettings() }
+                Button("Réinitialiser") { withAnimation(.mvState) { settings = MVAppSettings() } }
                     .disabled(settings.isEmpty)
                 Spacer()
                 Button("Annuler") { model.appSettingsTarget = nil }
@@ -122,16 +127,27 @@ struct MVAppSettingsSheet: View {
     private func symbolButton(_ symbol: String) -> some View {
         let selected = symbol == currentSymbol
         return Button {
-            // The guessed icon stays automatic, so it follows a renamed app
-            settings.symbol = symbol == app.symbolName ? nil : symbol
+            withAnimation(.mvGlide) {
+                // The guessed icon stays automatic, so it follows a renamed app
+                settings.symbol = symbol == app.symbolName ? nil : symbol
+            }
+            picks[symbol, default: 0] += 1
         } label: {
             Image(systemName: symbol)
                 .font(.system(size: 14))
+                .symbolEffect(.bounce, value: picks[symbol] ?? 0)
                 .frame(width: 32, height: 32)
-                .background(RoundedRectangle(cornerRadius: 8, style: .continuous)
-                    .fill(selected ? mvAccent.opacity(0.15) : .clear))
-                .overlay(RoundedRectangle(cornerRadius: 8, style: .continuous)
-                    .strokeBorder(selected ? mvAccentForeground : .clear, lineWidth: 1.5))
+                .background {
+                    if selected {
+                        // The highlight glides from the old icon to the new one
+                        selection(in: symbolSelection, id: "symbol") {
+                            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                                .fill(mvAccent.opacity(0.15))
+                                .overlay(RoundedRectangle(cornerRadius: 8, style: .continuous)
+                                    .strokeBorder(mvAccentForeground, lineWidth: 1.5))
+                        }
+                    }
+                }
                 .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
@@ -141,7 +157,7 @@ struct MVAppSettingsSheet: View {
     private func colorButton(_ color: MVTileColor?) -> some View {
         let selected = settings.color == color
         return Button {
-            settings.color = color
+            withAnimation(.mvGlide) { settings.color = color }
         } label: {
             Circle()
                 .fill(color?.color ?? Color.secondary.opacity(0.25))
@@ -152,12 +168,28 @@ struct MVAppSettingsSheet: View {
                     }
                 }
                 .padding(3)
-                .overlay(Circle().strokeBorder(selected ? mvAccentForeground : .clear, lineWidth: 2))
+                .overlay {
+                    if selected {
+                        selection(in: colorSelection, id: "color") {
+                            Circle().strokeBorder(mvAccentForeground, lineWidth: 2)
+                        }
+                    }
+                }
         }
         .buttonStyle(.plain)
         .help(color?.label ?? String(localized: "Sans couleur"))
         .accessibilityLabel(color?.label ?? String(localized: "Sans couleur"))
         .accessibilityAddTraits(selected ? .isSelected : [])
+    }
+
+    /// A selection mark that moves between choices, or simply appears with Reduce Motion.
+    @ViewBuilder
+    private func selection(in namespace: Namespace.ID, id: String, @ViewBuilder mark: () -> some View) -> some View {
+        if reduceMotion {
+            mark()
+        } else {
+            mark().matchedGeometryEffect(id: id, in: namespace)
+        }
     }
 
     private func appRow(_ path: String) -> some View {
@@ -170,7 +202,7 @@ struct MVAppSettingsSheet: View {
             Text(name)
             Spacer()
             Button {
-                settings.openApps.removeAll { $0 == path }
+                withAnimation(.mvState) { settings.openApps.removeAll { $0 == path } }
             } label: {
                 Image(systemName: "minus.circle")
             }
@@ -188,8 +220,10 @@ struct MVAppSettingsSheet: View {
         panel.directoryURL = URL(fileURLWithPath: "/Applications")
         panel.prompt = String(localized: "Ajouter")
         guard panel.runModal() == .OK else { return }
-        for url in panel.urls where !settings.openApps.contains(url.path) {
-            settings.openApps.append(url.path)
+        withAnimation(.mvState) {
+            for url in panel.urls where !settings.openApps.contains(url.path) {
+                settings.openApps.append(url.path)
+            }
         }
     }
 }

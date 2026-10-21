@@ -712,6 +712,7 @@ struct MVAppTile: View {
         Image(systemName: settings.symbol ?? app.symbolName)
             .font(.system(size: 30, weight: .regular))
             .foregroundStyle(settings.color.map { AnyShapeStyle($0.color) } ?? AnyShapeStyle(.primary.opacity(0.75)))
+            .contentTransition(.symbolEffect(.replace))
             .symbolEffect(.pulse, options: .repeating, isActive: launching)
     }
 }
@@ -731,6 +732,8 @@ struct MVQualityButton: View {
                 Text("\(model.preset.label) · \(model.qualitySummary)")
                     .font(.system(size: 12, weight: .medium))
                     .monospacedDigit()
+                    .contentTransition(.numericText())
+                    .animation(.mvState, value: model.qualitySummary)
                 Image(systemName: "chevron.down").font(.system(size: 9, weight: .semibold))
             }
         }
